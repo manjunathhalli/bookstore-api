@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Book Store{% endblock %} — Book Store</title>
+    <style>
+        :root {
+            --bg: #0f172a; --bg-soft: #131c31; --card: #1e293b; --card-soft: #243349;
+            --primary: #6366f1; --primary-dark: #4f46e5; --accent: #818cf8;
+            --text: #e2e8f0; --heading: #f8fafc; --muted: #94a3b8; --border: #334155;
+            --success: #6ee7b7; --success-bg: rgba(16,185,129,.12); --success-border: rgba(16,185,129,.4);
+            --error: #fca5a5; --error-bg: rgba(239,68,68,.12); --error-border: rgba(239,68,68,.4);
+            --shadow: 0 4px 24px rgba(0,0,0,.35);
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: radial-gradient(1200px 600px at 80% -10%, #1e1b4b 0%, transparent 55%),
+                        radial-gradient(1000px 500px at -10% 0%, #0e2a4a 0%, transparent 50%), var(--bg);
+            background-attachment: fixed; color: var(--text); line-height: 1.55; min-height: 100vh; }
+        header { background: rgba(15,23,42,.75); backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border); padding: 0 20px; position: sticky; top: 0; z-index: 50; }
+        header .bar { max-width: 1080px; margin: 0 auto; display: flex; align-items: center; gap: 20px; height: 62px; flex-wrap: wrap; }
+        header .brand { font-weight: 800; font-size: 1.1rem; margin-right: 6px; color: var(--heading);
+            letter-spacing: -.01em; }
+        header nav { display: flex; gap: 6px; flex-wrap: wrap; }
+        header nav a { color: var(--muted); text-decoration: none; font-size: .88rem; font-weight: 500;
+            padding: 7px 12px; border-radius: 8px; transition: all .15s ease; }
+        header nav a:hover { color: var(--heading); background: rgba(255,255,255,.06); }
+        header nav a.active { color: #fff; background: var(--primary); box-shadow: 0 4px 12px rgba(99,102,241,.4); }
+        header .userbox { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+        header .who { color: var(--text); font-size: .85rem; display: flex; align-items: center; gap: 8px; }
+        header .userbox .pill { background: rgba(99,102,241,.2); color: var(--accent); border: 1px solid rgba(99,102,241,.35); }
+        header .logout-btn { padding: 7px 16px; font-size: .82rem; }
+        .auth-shell { max-width: 420px; margin: 9vh auto 0; }
+        .auth-shell .brand-lg { text-align: center; font-size: 1.6rem; font-weight: 800; margin-bottom: 6px; color: var(--heading);
+            letter-spacing: -.02em; }
+        .auth-shell .switch { text-align: center; margin-top: 18px; font-size: .88rem; color: var(--muted); }
+        .auth-shell .switch a, a { color: var(--accent); }
+        .wrapper { max-width: 1080px; margin: 0 auto; padding: 38px 20px 70px; }
+        h1 { font-size: 1.7rem; margin: 0 0 6px; color: var(--heading); letter-spacing: -.02em; font-weight: 700; }
+        .subtitle { color: var(--muted); margin: 0 0 30px; font-size: .96rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 22px; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px;
+            margin-bottom: 22px; box-shadow: var(--shadow); }
+        .card h2 { font-size: 1.1rem; margin: 0 0 18px; color: var(--heading); }
+        label { display: block; font-weight: 600; margin-bottom: 7px; font-size: .82rem; color: var(--text); }
+        select, textarea, input { width: 100%; padding: 11px 13px; border: 1px solid var(--border);
+            border-radius: 10px; font-size: .92rem; font-family: inherit; background: var(--bg-soft); color: var(--text);
+            margin-bottom: 14px; transition: border-color .15s ease, box-shadow .15s ease; }
+        select option { background: var(--card); color: var(--text); }
+        textarea { resize: vertical; min-height: 80px; }
+        select:focus, textarea:focus, input:focus { outline: none; border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99,102,241,.25); }
+        ::placeholder { color: var(--muted); opacity: .7; }
+        .row { display: flex; gap: 14px; flex-wrap: wrap; }
+        .row > div { flex: 1; min-width: 150px; }
+        button { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: #fff; border: none;
+            padding: 11px 22px; border-radius: 10px; font-size: .92rem; font-weight: 600; cursor: pointer;
+            transition: transform .12s ease, box-shadow .15s ease, filter .15s ease; box-shadow: 0 4px 14px rgba(99,102,241,.3); }
+        button:hover { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 6px 18px rgba(99,102,241,.45); }
+        button:active { transform: translateY(0); }
+        button.danger { background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); box-shadow: 0 4px 14px rgba(239,68,68,.3); }
+        button.ghost { background: rgba(99,102,241,.14); color: var(--accent); border: 1px solid rgba(99,102,241,.3); box-shadow: none; }
+        button.ghost:hover { background: rgba(99,102,241,.24); }
+        .alert { padding: 13px 16px; border-radius: 10px; margin-bottom: 22px; font-size: .9rem; }
+        .alert-success { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+        .alert-error { background: var(--error-bg); color: var(--error); border: 1px solid var(--error-border); }
+        .alert-error ul { margin: 6px 0 0; padding-left: 18px; }
+        table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+        th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--border); }
+        thead th { color: var(--muted); font-weight: 600; font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; }
+        tbody tr { transition: background .12s ease; }
+        tbody tr:hover { background: rgba(255,255,255,.03); }
+        .muted { color: var(--muted); font-size: .85rem; }
+        .stars { color: #fbbf24; letter-spacing: 2px; }
+        .pill { display: inline-block; background: rgba(99,102,241,.16); color: var(--accent); border-radius: 999px;
+            padding: 3px 11px; font-size: .76rem; font-weight: 600; }
+        .inline-form { display: inline; }
+        .dash-card { display: block; text-decoration: none; color: inherit; position: relative; overflow: hidden;
+            transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+        .dash-card:hover { border-color: var(--primary); transform: translateY(-3px);
+            box-shadow: 0 12px 30px rgba(99,102,241,.22); }
+        .dash-card .ico { font-size: 1.9rem; }
+        .dash-card h2 { margin: 12px 0 6px; }
+        a.btn-link { text-decoration: none; }
+    </style>
+</head>
+<body>
+    {% set path = request.url.path %}
+    <header>
+        <div class="bar">
+            <span class="brand">📚 Book Store</span>
+            {% if current_user %}
+                <nav>
+                    <a href="/dashboard" class="{{ 'active' if path == '/dashboard' else '' }}">Dashboard</a>
+                    <a href="/books" class="{{ 'active' if path.startswith('/books') else '' }}">Books</a>
+                    {% if current_user.role == 'user' %}
+                        <a href="/cart" class="{{ 'active' if path.startswith('/cart') else '' }}">Cart</a>
+                        <a href="/wishlist" class="{{ 'active' if path.startswith('/wishlist') else '' }}">Wishlist</a>
+                        <a href="/address" class="{{ 'active' if path.startswith('/address') else '' }}">Address</a>
+                        <a href="/orders" class="{{ 'active' if path.startswith('/orders') else '' }}">Orders</a>
+                        <a href="/feedback" class="{{ 'active' if path.startswith('/feedback') else '' }}">Feedback</a>
+                    {% endif %}
+                    {% if current_user.role == 'admin' %}
+                        <a href="/users" class="{{ 'active' if path.startswith('/users') else '' }}">Users</a>
+                        <a href="/orders" class="{{ 'active' if path.startswith('/orders') else '' }}">Orders</a>
+                    {% endif %}
+                    <a href="/password" class="{{ 'active' if path.startswith('/password') else '' }}">Password</a>
+                </nav>
+                <div class="userbox">
+                    <span class="who">{{ current_user.first_name }} <span class="pill">{{ current_user.role }}</span></span>
+                    <form action="/logout" method="POST" class="inline-form">
+                        <button type="submit" class="ghost logout-btn">Logout</button>
+                    </form>
+                </div>
+            {% endif %}
+        </div>
+    </header>
+
+    <div class="wrapper">
+        {% block heading %}
+        <h1>{% block h1 %}{% endblock %}</h1>
+        <p class="subtitle">{% block subtitle %}{% endblock %}</p>
+        {% endblock %}
+
+        {% if status %}<div class="alert alert-success">{{ status }}</div>{% endif %}
+        {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+        {% if errors %}
+            <div class="alert alert-error">
+                <strong>Please fix the following:</strong>
+                <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+            </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

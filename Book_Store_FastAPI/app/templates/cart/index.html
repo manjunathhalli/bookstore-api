@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Cart{% endblock %}
+{% block h1 %}Cart{% endblock %}
+{% block subtitle %}Your shopping cart.{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <h2>{{ current_user.first_name }}'s Cart ({{ items|length }})</h2>
+        {% if items %}
+            <table>
+                <thead>
+                    <tr><th>Cart&nbsp;ID</th><th>Book</th><th>Author</th><th>Price</th><th>Qty</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                        <tr>
+                            <td>{{ item.id }}</td>
+                            <td>{{ item.name }}</td>
+                            <td>{{ item.author }}</td>
+                            <td>₹{{ "%.2f"|format(item.price|float) }}</td>
+                            <td>{{ item.book_quantity }}</td>
+                            <td style="white-space: nowrap;">
+                                <form class="inline-form" action="/cart/increment" method="POST">
+                                    <input type="hidden" name="id" value="{{ item.id }}">
+                                    <button type="submit" class="ghost">＋</button>
+                                </form>
+                                <form class="inline-form" action="/cart/decrement" method="POST">
+                                    <input type="hidden" name="id" value="{{ item.id }}">
+                                    <button type="submit" class="ghost">－</button>
+                                </form>
+                                <form class="inline-form" action="/cart/delete" method="POST" onsubmit="return confirm('Remove from cart?');">
+                                    <input type="hidden" name="id" value="{{ item.id }}">
+                                    <button type="submit" class="danger">Remove</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}<p class="muted">The cart is empty.</p>{% endif %}
+    </div>
+
+    <div class="card" style="max-width: 480px;">
+        <h2>Add Book to Cart</h2>
+        <form action="/cart" method="POST">
+            <label for="book_id">Book</label>
+            <select name="book_id" id="book_id" required>
+                <option value="" disabled selected>Select a book…</option>
+                {% for book in books %}
+                    <option value="{{ book.id }}">{{ book.name }} (stock: {{ book.quantity }})</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Add to Cart</button>
+        </form>
+    </div>
+{% endblock %}

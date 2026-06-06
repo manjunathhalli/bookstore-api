@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block heading %}{% endblock %}
+
+{% block content %}
+    <div class="auth-shell">
+        <div class="brand-lg">📚 Book Store</div>
+        <p class="subtitle" style="text-align:center;">Sign in to continue</p>
+
+        <div class="card">
+            <h2>Login</h2>
+            <form action="/login" method="POST">
+                <label for="email">Email</label>
+                <input type="email" name="email" id="email" value="{{ old.email or '' }}" required autofocus>
+
+                <label for="password">Password</label>
+                <input type="password" name="password" id="password" required>
+
+                <button type="submit" style="width:100%;">Sign in</button>
+            </form>
+            <p class="switch">No account? <a href="/register">Create one</a></p>
+        </div>
+    </div>
+{% endblock %}

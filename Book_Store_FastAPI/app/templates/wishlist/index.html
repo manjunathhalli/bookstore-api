@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Wishlist{% endblock %}
+{% block h1 %}Wishlist{% endblock %}
+{% block subtitle %}Your saved books.{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <h2>{{ current_user.first_name }}'s Wishlist ({{ items|length }})</h2>
+        {% if items %}
+            <table>
+                <thead><tr><th>WL&nbsp;ID</th><th>Book</th><th>Author</th><th>Price</th><th>Actions</th></tr></thead>
+                <tbody>
+                    {% for item in items %}
+                        <tr>
+                            <td>{{ item.id }}</td>
+                            <td>{{ item.name }}</td>
+                            <td>{{ item.author }}</td>
+                            <td>₹{{ "%.2f"|format(item.price|float) }}</td>
+                            <td style="white-space: nowrap;">
+                                <form class="inline-form" action="/wishlist/move-to-cart" method="POST">
+                                    <input type="hidden" name="id" value="{{ item.id }}">
+                                    <button type="submit" class="ghost">Move to cart</button>
+                                </form>
+                                <form class="inline-form" action="/wishlist/delete" method="POST" onsubmit="return confirm('Remove from wishlist?');">
+                                    <input type="hidden" name="id" value="{{ item.id }}">
+                                    <button type="submit" class="danger">Remove</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}<p class="muted">The wishlist is empty.</p>{% endif %}
+    </div>
+
+    <div class="card" style="max-width: 480px;">
+        <h2>Add Book to Wishlist</h2>
+        <form action="/wishlist" method="POST">
+            <label for="book_id">Book</label>
+            <select name="book_id" id="book_id" required>
+                <option value="" disabled selected>Select a book…</option>
+                {% for book in books %}
+                    <option value="{{ book.id }}">{{ book.name }} (stock: {{ book.quantity }})</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Add to Wishlist</button>
+        </form>
+    </div>
+{% endblock %}

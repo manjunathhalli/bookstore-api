@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Books{% endblock %}
+{% block h1 %}Books{% endblock %}
+{% block subtitle %}Browse, search and manage the book catalogue.{% endblock %}
+
+{% block content %}
+    {# Toolbar: search + sort #}
+    <div class="card">
+        <div class="row" style="align-items: flex-end;">
+            <form action="/books" method="GET" style="flex: 2; display: flex; gap: 10px; align-items: flex-end;">
+                <div style="flex: 1;">
+                    <label for="q">Search by name or author</label>
+                    <input type="text" name="q" id="q" value="{{ query }}" placeholder="e.g. Rowling" style="margin-bottom: 0;">
+                </div>
+                <button type="submit">Search</button>
+                {% if query %}
+                    <a class="btn-link" href="/books"><button type="button" class="ghost">Clear</button></a>
+                {% endif %}
+            </form>
+            <div style="display: flex; gap: 8px; align-items: flex-end;">
+                <a class="btn-link" href="/books?sort=low"><button type="button" class="{{ '' if sort == 'low' else 'ghost' }}">Price ↑</button></a>
+                <a class="btn-link" href="/books?sort=high"><button type="button" class="{{ '' if sort == 'high' else 'ghost' }}">Price ↓</button></a>
+            </div>
+        </div>
+    </div>
+
+    {# Catalogue #}
+    <div class="card">
+        <h2>Catalogue ({{ books|length }})</h2>
+        {% if books %}
+            <table>
+                <thead>
+                    <tr><th>#</th><th>Cover</th><th>Name</th><th>Author</th><th>Price</th><th>Qty</th>{% if is_admin %}<th></th>{% endif %}</tr>
+                </thead>
+                <tbody>
+                    {% for book in books %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>
+                                {% if book.image %}
+                                    <img src="{{ book.image }}" alt="" style="width: 38px; height: 52px; object-fit: cover; border-radius: 4px;">
+                                {% else %}<span class="muted">—</span>{% endif %}
+                            </td>
+                            <td>{{ book.name }}</td>
+                            <td>{{ book.author }}</td>
+                            <td>₹{{ "%.2f"|format(book.price|float) }}</td>
+                            <td>{{ book.quantity }}</td>
+                            {% if is_admin %}
+                                <td style="white-space: nowrap;">
+                                    <a class="btn-link" href="/books/{{ book.id }}/edit"><button type="button" class="ghost">Edit</button></a>
+                                    <form class="inline-form" action="/books/{{ book.id }}/delete" method="POST" onsubmit="return confirm('Delete this book?');">
+                                        <button type="submit" class="danger">Delete</button>
+                                    </form>
+                                </td>
+                            {% endif %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}<p class="muted">No books found.</p>{% endif %}
+    </div>
+
+    {% if is_admin %}
+    <div class="grid">
+        {# Add book #}
+        <div class="card">
+            <h2>Add a Book</h2>
+            <form action="/books" method="POST" enctype="multipart/form-data">
+                <label for="name">Name</label>
+                <input type="text" name="name" id="name" required>
+
+                <label for="author">Author</label>
+                <input type="text" name="author" id="author" required>
+
+                <label for="description">Description</label>
+                <textarea name="description" id="description" required></textarea>
+
+                <div class="row">
+                    <div>
+                        <label for="Price">Price</label>
+                        <input type="number" step="0.01" min="0" name="Price" id="Price" required>
+                    </div>
+                    <div>
+                        <label for="quantity">Quantity</label>
+                        <input type="number" min="0" name="quantity" id="quantity" required>
+                    </div>
+                </div>
+
+                <label for="image">Cover image</label>
+                <input type="file" name="image" id="image" accept="image/*" required>
+
+                <button type="submit">Create Book</button>
+            </form>
+        </div>
+
+        {# Add stock #}
+        <div class="card">
+            <h2>Add Stock Quantity</h2>
+            <form action="/books/add-quantity" method="POST">
+                <label for="stock_id">Book</label>
+                <select name="id" id="stock_id" required>
+                    <option value="" disabled selected>Select a book…</option>
+                    {% for book in books %}
+                        <option value="{{ book.id }}">{{ book.name }} (stock: {{ book.quantity }})</option>
+                    {% endfor %}
+                </select>
+                <label for="add_qty">Quantity to add</label>
+                <input type="number" min="1" name="quantity" id="add_qty" value="1" required>
+                <button type="submit">Add Stock</button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+{% endblock %}

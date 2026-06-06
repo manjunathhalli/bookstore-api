@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Feedback & Ratings{% endblock %}
+{% block h1 %}Feedback &amp; Ratings{% endblock %}
+{% block subtitle %}Share your thoughts on a book and view its community rating.{% endblock %}
+
+{% block content %}
+    {% if average %}
+        {% set r = (average.rating|round|int) %}
+        <div class="card" style="background: rgba(99,102,241,.12); border-color: rgba(99,102,241,.35);">
+            Average rating for <strong>{{ average.book or 'this book' }}</strong>:
+            <span class="stars">{{ '★' * r }}{{ '☆' * (5 - r) }}</span>
+            <strong>{{ "%.2f"|format(average.rating) if average.rating else 'No ratings yet' }}</strong>
+        </div>
+    {% endif %}
+
+    <div class="grid">
+        {# Submit Feedback #}
+        <div class="card">
+            <h2>Leave Feedback</h2>
+            <form action="/feedback" method="POST">
+                <label for="book_id">Book</label>
+                <select name="book_id" id="book_id" required>
+                    <option value="" disabled selected>Select a book…</option>
+                    {% for book in books %}
+                        <option value="{{ book.id }}">{{ book.name }}{% if book.author %} — {{ book.author }}{% endif %}</option>
+                    {% endfor %}
+                </select>
+
+                <label for="rating">Rating (1–5)</label>
+                <input type="number" name="rating" id="rating" min="1" max="5" step="1" value="5" required>
+
+                <label for="feedback">Feedback</label>
+                <textarea name="feedback" id="feedback" placeholder="What did you think of this book?" required></textarea>
+
+                <button type="submit">Submit Feedback</button>
+            </form>
+        </div>
+
+        {# Lookup Average Rating #}
+        <div class="card">
+            <h2>Check Average Rating</h2>
+            <form action="/feedback/average" method="POST">
+                <label for="lookup_book_id">Book</label>
+                <select name="book_id" id="lookup_book_id" required>
+                    <option value="" disabled selected>Select a book…</option>
+                    {% for book in books %}
+                        <option value="{{ book.id }}">{{ book.name }}{% if book.author %} — {{ book.author }}{% endif %}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit">Get Average Rating</button>
+            </form>
+
+            {% if lookup %}
+                {% set lr = (lookup.rating|round|int) %}
+                <div class="card" style="background: rgba(99,102,241,.12); border-color: rgba(99,102,241,.35); margin-top: 16px;">
+                    {% if lookup.book %}
+                        <strong>{{ lookup.book }}</strong> —
+                        <span class="stars">{{ '★' * lr }}{{ '☆' * (5 - lr) }}</span>
+                        <strong>{{ "%.2f"|format(lookup.rating) if lookup.rating else 'No ratings yet' }}</strong>
+                    {% else %}<span class="muted">Book not found.</span>{% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

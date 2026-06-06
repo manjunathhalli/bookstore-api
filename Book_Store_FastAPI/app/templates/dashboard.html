@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block h1 %}Dashboard{% endblock %}
+{% block subtitle %}{{ 'Administrator console — manage the catalogue and accounts.' if role == 'admin' else 'Welcome! Browse books and manage your orders.' }}{% endblock %}
+
+{% block content %}
+    <div class="grid">
+        <a class="card dash-card" href="/books">
+            <div class="ico">📖</div>
+            <h2>Books</h2>
+            <p class="muted">
+                {{ 'Browse, search, add, update & manage stock.' if role == 'admin' else 'Browse, search & sort the catalogue.' }}
+                <span class="pill">{{ stats.books }}</span>
+            </p>
+        </a>
+
+        {% if role == 'user' %}
+            <a class="card dash-card" href="/cart">
+                <div class="ico">🛒</div>
+                <h2>Cart</h2>
+                <p class="muted">Add books, adjust quantity, remove items. <span class="pill">{{ stats.carts }}</span></p>
+            </a>
+            <a class="card dash-card" href="/wishlist">
+                <div class="ico">⭐</div>
+                <h2>Wishlist</h2>
+                <p class="muted">Save books for later &amp; move them to the cart. <span class="pill">{{ stats.wishlists }}</span></p>
+            </a>
+            <a class="card dash-card" href="/address">
+                <div class="ico">🏠</div>
+                <h2>Address</h2>
+                <p class="muted">Manage your delivery addresses. <span class="pill">{{ stats.addresses }}</span></p>
+            </a>
+            <a class="card dash-card" href="/orders">
+                <div class="ico">📦</div>
+                <h2>Orders</h2>
+                <p class="muted">Place orders against a delivery address. <span class="pill">{{ stats.orders }}</span></p>
+            </a>
+            <a class="card dash-card" href="/feedback">
+                <div class="ico">💬</div>
+                <h2>Feedback</h2>
+                <p class="muted">Rate books &amp; view average ratings.</p>
+            </a>
+        {% endif %}
+
+        {% if role == 'admin' %}
+            <a class="card dash-card" href="/users">
+                <div class="ico">👤</div>
+                <h2>Users</h2>
+                <p class="muted">View all registered accounts. <span class="pill">{{ stats.users }}</span></p>
+            </a>
+            <a class="card dash-card" href="/orders">
+                <div class="ico">📦</div>
+                <h2>Orders</h2>
+                <p class="muted">Total orders placed across the store. <span class="pill">{{ stats.orders }}</span></p>
+            </a>
+        {% endif %}
+
+        <a class="card dash-card" href="/password">
+            <div class="ico">🔑</div>
+            <h2>Password</h2>
+            <p class="muted">Reset your password.</p>
+        </a>
+    </div>
+{% endblock %}

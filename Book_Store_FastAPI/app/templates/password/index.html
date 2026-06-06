@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Password{% endblock %}
+{% block h1 %}Password{% endblock %}
+{% block subtitle %}Forgot and reset password flow.{% endblock %}
+
+{% block content %}
+    {% if token %}
+        <div class="card" style="background: rgba(99,102,241,.12); border-color: rgba(99,102,241,.35);">
+            <strong>Generated reset token</strong>
+            <p class="muted" style="word-break: break-all; margin: 8px 0 0;">{{ token }}</p>
+        </div>
+    {% endif %}
+
+    <div class="grid">
+        {# Forgot #}
+        <div class="card">
+            <h2>Forgot Password</h2>
+            <p class="muted">Enter your email to generate a reset token.</p>
+            <form action="/password/forgot" method="POST">
+                <label for="forgot_email">Email</label>
+                <input type="email" name="email" id="forgot_email" value="{{ old.email or '' }}" required>
+                <button type="submit">Generate Reset Token</button>
+            </form>
+        </div>
+
+        {# Reset #}
+        <div class="card">
+            <h2>Reset Password</h2>
+            <form action="/password/reset" method="POST">
+                <label for="reset_email">Email</label>
+                <input type="email" name="email" id="reset_email" value="{{ old.email or '' }}" required>
+                <label for="new_password">New password</label>
+                <input type="password" name="new_password" id="new_password" required>
+                <label for="confirm_password">Confirm password</label>
+                <input type="password" name="confirm_password" id="confirm_password" required>
+                <button type="submit">Reset Password</button>
+            </form>
+        </div>
+    </div>
+{% endblock %}

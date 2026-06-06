@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Create account{% endblock %}
+{% block heading %}{% endblock %}
+
+{% block content %}
+    <div class="auth-shell" style="max-width: 520px;">
+        <div class="brand-lg">📚 Book Store</div>
+        <p class="subtitle" style="text-align:center;">Create your account</p>
+
+        <div class="card">
+            <h2>Register</h2>
+            <form action="/register" method="POST">
+                <div class="row">
+                    <div>
+                        <label for="first_name">First name</label>
+                        <input type="text" name="first_name" id="first_name" value="{{ old.first_name or '' }}" required autofocus>
+                    </div>
+                    <div>
+                        <label for="last_name">Last name</label>
+                        <input type="text" name="last_name" id="last_name" value="{{ old.last_name or '' }}" required>
+                    </div>
+                </div>
+
+                <label for="email">Email</label>
+                <input type="email" name="email" id="email" value="{{ old.email or '' }}" required>
+
+                <div class="row">
+                    <div>
+                        <label for="phone_no">Phone no.</label>
+                        <input type="text" name="phone_no" id="phone_no" value="{{ old.phone_no or '' }}" required>
+                    </div>
+                    <div>
+                        <label for="role">Account type</label>
+                        <select name="role" id="role" required>
+                            <option value="user" {{ 'selected' if old.role == 'user' else '' }}>user — shop for books</option>
+                            <option value="admin" {{ 'selected' if old.role == 'admin' else '' }}>admin — manage catalogue</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div>
+                        <label for="password">Password</label>
+                        <input type="password" name="password" id="password" required>
+                    </div>
+                    <div>
+                        <label for="confirm_password">Confirm password</label>
+                        <input type="password" name="confirm_password" id="confirm_password" required>
+                    </div>
+                </div>
+
+                <button type="submit" style="width:100%;">Create account &amp; sign in</button>
+            </form>
+            <p class="switch">Already registered? <a href="/login">Sign in</a></p>
+        </div>
+    </div>
+{% endblock %}

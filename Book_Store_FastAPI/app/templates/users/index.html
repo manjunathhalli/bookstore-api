@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Users{% endblock %}
+{% block h1 %}Users{% endblock %}
+{% block subtitle %}All registered accounts (admin only).{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <h2>Registered Users ({{ users|length }})</h2>
+        {% if users %}
+            <table>
+                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th></tr></thead>
+                <tbody>
+                    {% for u in users %}
+                        <tr>
+                            <td>{{ u.id }}</td>
+                            <td>{{ u.first_name }} {{ u.last_name }}</td>
+                            <td>{{ u.email }}</td>
+                            <td>{{ u.phone_no }}</td>
+                            <td><span class="pill">{{ u.role }}</span></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}<p class="muted">No users registered yet.</p>{% endif %}
+    </div>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Edit Address{% endblock %}
+{% block h1 %}Edit Address{% endblock %}
+{% block subtitle %}Address #{{ address.id }}{% endblock %}
+
+{% block content %}
+    <div class="card" style="max-width: 560px;">
+        <form action="/address/{{ address.id }}" method="POST">
+            <label for="address">Address</label>
+            <textarea name="address" id="address" required>{{ address.address }}</textarea>
+            <div class="row">
+                <div>
+                    <label for="city">City</label>
+                    <input type="text" name="city" id="city" value="{{ address.city }}" required>
+                </div>
+                <div>
+                    <label for="state">State</label>
+                    <input type="text" name="state" id="state" value="{{ address.state }}" required>
+                </div>
+            </div>
+            <div class="row">
+                <div>
+                    <label for="landmark">Landmark</label>
+                    <input type="text" name="landmark" id="landmark" value="{{ address.landmark }}" required>
+                </div>
+                <div>
+                    <label for="pincode">Pincode</label>
+                    <input type="number" name="pincode" id="pincode" value="{{ address.pincode }}" required>
+                </div>
+            </div>
+            <label for="address_type">Address type</label>
+            <input type="text" name="address_type" id="address_type" value="{{ address.address_type }}" required>
+
+            <button type="submit">Save Changes</button>
+            <a class="btn-link" href="/address"><button type="button" class="ghost">Cancel</button></a>
+        </form>
+    </div>
+{% endblock %}

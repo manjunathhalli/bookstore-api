@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+app/static/book-covers/*
+!app/static/book-covers/.gitkeep
+.pytest_cache/

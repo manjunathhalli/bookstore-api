@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Address{% endblock %}
+{% block h1 %}Address{% endblock %}
+{% block subtitle %}Your delivery addresses.{% endblock %}
+
+{% block content %}
+    <div class="card">
+        <h2>{{ current_user.first_name }}'s Addresses ({{ addresses|length }})</h2>
+        {% if addresses %}
+            <table>
+                <thead><tr><th>ID</th><th>Address</th><th>City</th><th>State</th><th>Pincode</th><th>Type</th><th>Actions</th></tr></thead>
+                <tbody>
+                    {% for a in addresses %}
+                        <tr>
+                            <td>{{ a.id }}</td>
+                            <td>{{ a.address }}<br><span class="muted">{{ a.landmark }}</span></td>
+                            <td>{{ a.city }}</td>
+                            <td>{{ a.state }}</td>
+                            <td>{{ a.pincode }}</td>
+                            <td><span class="pill">{{ a.address_type }}</span></td>
+                            <td style="white-space: nowrap;">
+                                <a class="btn-link" href="/address/{{ a.id }}/edit"><button type="button" class="ghost">Edit</button></a>
+                                <form class="inline-form" action="/address/{{ a.id }}/delete" method="POST" onsubmit="return confirm('Delete this address?');">
+                                    <button type="submit" class="danger">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}<p class="muted">No addresses yet.</p>{% endif %}
+    </div>
+
+    <div class="card" style="max-width: 560px;">
+        <h2>Add Address</h2>
+        <form action="/address" method="POST">
+            <label for="address">Address</label>
+            <textarea name="address" id="address" required></textarea>
+            <div class="row">
+                <div>
+                    <label for="city">City</label>
+                    <input type="text" name="city" id="city" required>
+                </div>
+                <div>
+                    <label for="state">State</label>
+                    <input type="text" name="state" id="state" required>
+                </div>
+            </div>
+            <div class="row">
+                <div>
+                    <label for="landmark">Landmark</label>
+                    <input type="text" name="landmark" id="landmark" required>
+                </div>
+                <div>
+                    <label for="pincode">Pincode</label>
+                    <input type="number" name="pincode" id="pincode" required>
+                </div>
+            </div>
+            <label for="address_type">Address type</label>
+            <select name="address_type" id="address_type" required>
+                <option value="Home">Home</option>
+                <option value="Work">Work</option>
+                <option value="Other">Other</option>
+            </select>
+            <button type="submit">Add Address</button>
+        </form>
+    </div>
+{% endblock %}

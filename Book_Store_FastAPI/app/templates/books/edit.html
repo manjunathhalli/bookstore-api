@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Edit Book{% endblock %}
+{% block h1 %}Edit Book{% endblock %}
+{% block subtitle %}{{ book.name }}{% endblock %}
+
+{% block content %}
+    <div class="card" style="max-width: 560px;">
+        <form action="/books/{{ book.id }}" method="POST" enctype="multipart/form-data">
+            <label for="name">Name</label>
+            <input type="text" name="name" id="name" value="{{ book.name }}" required>
+
+            <label for="author">Author</label>
+            <input type="text" name="author" id="author" value="{{ book.author }}" required>
+
+            <label for="description">Description</label>
+            <textarea name="description" id="description" required>{{ book.description }}</textarea>
+
+            <label for="Price">Price</label>
+            <input type="number" step="0.01" min="0" name="Price" id="Price" value="{{ book.price }}" required>
+
+            {% if book.image %}
+                <label>Current cover</label>
+                <img src="{{ book.image }}" alt="" style="width: 70px; height: 96px; object-fit: cover; border-radius: 6px; margin-bottom: 14px;">
+            {% endif %}
+
+            <label for="image">Replace cover image (optional)</label>
+            <input type="file" name="image" id="image" accept="image/*">
+
+            <button type="submit">Save Changes</button>
+            <a class="btn-link" href="/books"><button type="button" class="ghost">Cancel</button></a>
+        </form>
+    </div>
+{% endblock %}
