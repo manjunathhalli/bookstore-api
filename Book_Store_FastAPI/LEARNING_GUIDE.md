@@ -9,12 +9,16 @@ It is written for learning, so it explains the *why*, not just the *what*.
 **Sections 1–10** build the core app (this is the original guide). **Sections
 11–18** then add the rest of a production-style Python stack on top of it —
 each one bolted onto this same codebase, in the order you'd naturally reach
-for them once the basics work:
+for them once the basics work. **Sections 19–20** add the AI layer: a
+switchable LLM client, RAG, tool-calling agents (LangChain/LangGraph), local
+embeddings, fine-tuning, and a second RAG chatbot over a real vector database
+(Qdrant):
 
 ```
 Python → FastAPI → Pydantic → SQLAlchemy → Alembic → MySQL → JWT/OAuth2
        → Dependency Injection → Redis → Celery → HTTPX → Pandas/OpenPyXL
-       → Pytest → Docker → AWS
+       → Pytest → Docker → AWS → LLM APIs → Embeddings → RAG
+       → LangChain / LangGraph agents → Fine-tuning → Qdrant
 ```
 
 | Layer | What it does here | Where | Section |
@@ -29,11 +33,14 @@ Python → FastAPI → Pydantic → SQLAlchemy → Alembic → MySQL → JWT/OAu
 | **Dependency Injection** | `Depends(...)` wires DB sessions + auth guards into routes. | `auth/dependencies.py` | 5 |
 | **Redis** | Caches the book catalogue so repeat reads skip the DB. | `core/redis_client.py`, `books/cache.py` | **12** |
 | **Celery** | Runs slow work (building a report) off the request thread. | `core/celery_app.py`, `reports/tasks.py` | **13** |
-| **HTTPX** | Calls external HTTP APIs (Claude/Groq, Business Central) server-side. | `core/ai.py`, `bc/client.py` | **14** |
+| **HTTPX** | Calls external HTTP APIs (Claude/Groq/Ollama, Business Central) server-side. | `core/ai.py`, `bc/client.py` | **14** |
 | **Pandas / OpenPyXL** | Turns SQL rows into a downloadable Excel sales report. | `reports/tasks.py` | **15** |
 | **Pytest** | Automated tests — no manual clicking through `/docs` to check a fix. | `tests/` | **16** |
 | **Docker** | One command runs the whole stack (app + worker + MySQL + Redis). | `Dockerfile`, `docker-compose.yml` | **17** |
 | **AWS** | Where it actually runs for real users. | see `AWS_DEPLOYMENT_GUIDE.md` | **18** |
+| **LLM APIs / RAG / Agents** | A switchable LLM (Groq/Anthropic/Ollama) powers 11 AI features + 2 BookBot chatbot variants (RAG, LangChain agent) that reason over real rows instead of training data. | `core/ai.py`, `ai/service.py`, `ai/agent.py` | **19** |
+| **LangGraph / Fine-tuning / Embeddings** | A 3rd chatbot variant as an explicit branching graph; a local classifier trained on this store's reviews; local embeddings for semantic search. | `ai/graph_agent.py`, `ai/finetune.py`, `core/ai.py` | **19** |
+| **Qdrant (vector DB)** | A 2nd, separate chatbot does RAG over Business Central data stored in a real vector database instead of a SQL column. | `bc/` | **20** |
 
 ---
 
@@ -851,6 +858,179 @@ image at them via environment variables — no code changes, only configuration.
 
 ---
 
+## 19. AI features — a switchable LLM, RAG, and agents
+
+### Why it matters here specifically
+Every feature so far reads/writes rows you typed. AI features add a *new*
+kind of data source — a language model — and the whole game is making it
+**reason over your real rows** instead of inventing answers. This repo builds
+that up in the order you'd actually reach for each piece: first a plain LLM
+call, then grounding it in real data (RAG), then letting it *act* (agents),
+then baking knowledge into a small model instead of re-sending it every call
+(fine-tuning). The AI hub page (`/ai`, `app/templates/ai/hub.html`) has the
+full concept-by-concept walkthrough with live code; this section is the
+"build it from scratch" version.
+
+### Where it lives
+```
+app/core/ai.py          # ClaudeService — one client, 3 switchable LLM backends + local embeddings
+app/ai/service.py       # feature logic: sentiment, search, recommendations, forecast, RAG chat, ...
+app/ai/agent.py         # LangChain tool-calling agent (Feature 5a)
+app/ai/graph_agent.py   # LangGraph explicit graph — same tools, adds a confirm branch (Feature 5c)
+app/ai/finetune.py      # local classifier trained on this store's own reviews (Feature 11)
+app/ai/schemas.py, api.py, web.py   # the same request-shape / JWT-API / session-UI split every feature uses
+```
+Same shape as every other feature package (`schemas` → `api`/`web`) — `ai/`
+just has extra logic modules (`service.py`, `agent.py`, `graph_agent.py`,
+`finetune.py`) instead of one flat `service.py`, because there's more than one
+kind of "feature logic" here.
+
+### Step 1 — one LLM call, switchable backend
+`ClaudeService.ask(prompt, system)` is the one function every text feature
+calls. It dispatches on `settings.ai_provider`:
+```python
+# app/core/ai.py
+def ask(self, prompt, system=None, model=None, max_tokens=1024) -> str:
+    if self._provider == "groq":   return self._ask_groq(prompt, system, model, max_tokens)
+    if self._provider == "ollama": return self._ask_ollama(prompt, system, model, max_tokens)
+    return self._ask_anthropic(prompt, system, model, max_tokens)
+```
+Three backends, one call site — `groq` (free, hosted), `ollama` (free, fully
+local, no key, no network), `anthropic` (paid). Every feature (sentiment,
+moderation, description generator, summarization, NL search, recommendations,
+forecast, auto-tagging, classic RAG chat) is built on this one function and
+`ask_json` (same thing, parses the reply as JSON) — see `app/ai/service.py`
+for all of them; they're all the shape `prompt in → ask()/ask_json() → one
+string or dict out`, no tools, no memory. This is **generative AI**: nothing
+more than a function call that happens to be answered by a language model.
+
+### Step 2 — RAG: ground it in real rows
+A plain LLM call above knows nothing about *this* store's books or *your*
+orders. RAG (Retrieval-Augmented Generation) fixes that in three steps —
+**retrieve** real rows, **paste them into the prompt**, **generate** with an
+instruction to answer only from that context:
+```python
+# app/ai/service.py — rag_chat_reply() (Feature 5b, the classic RAG chatbot)
+books = db.scalars(select(Book).where(Book.name.like(like) | ...)).all()
+catalog = "\n".join(f"- {b.name} by {b.author} (Rs.{b.price})" for b in books)
+system = f"Answer using ONLY the CATALOG below.\nCATALOG:\n{catalog}"
+claude.ask(message, system)
+```
+The model can't invent a book that isn't in `catalog` — it never had the
+chance to see anything else. This is the same idea the Business Central
+chatbot uses in Section 20, just with Qdrant doing the "retrieve" step
+instead of a SQL `LIKE`.
+
+### Step 3 — agents: let the model choose the action
+RAG still only produces *text*. An agent gives the model a list of **tools**
+(plain Python functions) and a loop that runs whichever one the model picks:
+```python
+# app/ai/agent.py (Feature 5a — LangChain)
+tools = [weather, search_catalog, my_orders, add_to_cart, place_order]
+executor = AgentExecutor(agent=create_tool_calling_agent(llm, tools, prompt), tools=tools)
+executor.invoke({"input": "add Clean Code to my cart"})
+# -> the model picks add_to_cart, it actually RUNS, then the model replies
+```
+`add_to_cart`/`place_order` are the two tools that *write* — every tool is
+scoped to the signed-in `user_id`, exactly like the ordinary `cart/web.py`
+and `orders/web.py` forms, so the agent can never touch another customer's
+data. `app/ai/graph_agent.py` (Feature 5c) wires the identical tools as an
+explicit **LangGraph** graph instead of a fixed loop, so it can *branch*: a
+`place_order` over ₹2,000 routes to a `confirm` node that pauses for an
+explicit yes/no instead of buying immediately, and it keeps a short per-user
+message history across turns — something a one-shot agent call can't do.
+
+### Step 4 — embeddings, semantic search, and fine-tuning
+`ClaudeService.embed(text)` turns text into a 384-number vector **locally**
+(`fastembed`/ONNX, falling back to `sentence-transformers`) — no API key,
+because Anthropic has no embeddings endpoint. Semantic Search (Feature 10)
+compares a query's vector to every book's stored vector with cosine
+similarity; Fine-Tuning (Feature 11) goes one step further and trains a tiny
+`LogisticRegression` classifier on those same vectors, labelled by this
+store's real star ratings, so sentiment prediction stops needing an LLM call
+at all once trained:
+```python
+# app/ai/finetune.py
+vectors = claude.embed_many(review_texts)
+clf = LogisticRegression().fit(vectors, ratings_as_labels)
+clf.predict([claude.embed(new_review_text)])   # no LLM call, no network
+```
+
+### Every feature explains itself
+Each AI page doesn't just show the output — it shows **how** that output was
+produced, grounded in the real call/data behind it: which tool the chatbot
+picked (`🔧 how it answered`), how many real reviews a summary came from, the
+actual retrieved-row count a RAG answer used, the real order/wishlist counts
+fed into a recommendation. Look at `app/ai/service.py`'s return types
+(`(reply, trace)`, `(summary, count)`, `(recs, basis)`) and the matching
+"How this worked" card in each `app/templates/ai/*.html` page.
+
+### Run it
+```powershell
+pip install -r requirements.txt     # langchain, langchain-groq/-anthropic/-ollama, langgraph, fastembed, scikit-learn
+copy .env.example .env
+```
+Set one provider in `.env` (`AI_PROVIDER=groq` + a free key from
+<https://console.groq.com/keys> is the fastest path to everything working;
+`AI_PROVIDER=ollama` needs no key at all once `ollama pull qwen2.5` is done).
+Then `python run.py` and open **`/ai`** — every feature is one click away.
+Embeddings (Semantic Search, Fine-Tuning) need no extra setup beyond
+`requirements.txt` — `fastembed`/`sentence-transformers` are already listed —
+and simply stay hidden if neither package can be loaded, the same
+degrade-gracefully pattern Section 9 describes for a missing table.
+
+---
+
+## 20. Business Central chatbot — RAG over a real vector database (Qdrant)
+
+### Why it matters here specifically
+Section 19's RAG chatbot retrieves with a SQL `LIKE` over a few dozen rows —
+fine at catalogue scale, but it doesn't demonstrate an actual **vector
+database**. This second, independent chatbot answers questions over
+Microsoft Dynamics 365 Business Central data (items, customers, sales
+orders) and retrieves with **Qdrant** instead, the same RAG shape at a scale
+where a real vector index matters.
+
+### Where it lives
+```
+app/bc/client.py        # fetches BC records (Azure AD OAuth2) or falls back to sample_data.py
+app/bc/sample_data.py   # bundled fake records — the pipeline works with zero BC credentials
+app/bc/vectorstore.py   # Qdrant client — embedded mode (a local folder) by default
+app/bc/service.py       # ingest (embed + upsert) and retrieve (search + ask) logic
+app/bc/schemas.py, api.py, web.py
+```
+
+### The pipeline
+1. **Sync** (admin, manual button) — fetch BC records (real API, or
+   `sample_data.py` if `BC_TENANT_ID` etc. are blank), flatten each record's
+   fields to text, embed with the *same* local model Section 19's Semantic
+   Search uses, and upsert into Qdrant with a deterministic id
+   (`uuid5("entity:key")`) so re-syncing updates in place instead of
+   duplicating.
+2. **Chat** (every request) — embed the question, `qdrant.search(...)` for
+   the closest-matching records, paste them into the prompt, and ask the
+   active `AI_PROVIDER` LLM to answer only from that context — identical
+   shape to `rag_chat_reply` in Section 19, different retrieval backend.
+
+### Qdrant, embedded (no server to run)
+```
+QDRANT_PATH=./qdrant_storage   # a local folder — no Docker, no server process
+# QDRANT_URL=http://localhost:6333   # set this instead (and blank QDRANT_PATH) to use a real server
+```
+Embedded mode holds an exclusive lock on that folder — only one app process
+can have it open at a time.
+
+### Run it
+```powershell
+python run.py
+```
+Open **`/bc/chat`**, click **"Sync now"** (admin) to ingest the bundled
+sample data, then ask something like *"what items do we have low stock on?"*
+— no Business Central subscription or Qdrant server required to see the
+whole pipeline work end to end.
+
+---
+
 ### One-paragraph summary
 You configure settings (`core/config`), open a database (`core/database`),
 describe tables as classes (each feature's `models`), validate inputs (each
@@ -862,6 +1042,9 @@ model → DB, and the response climbs back **up**. Master one feature's path and
 you've mastered them all. Everything after Section 10 is the same idea applied
 outward: **Alembic** versions the DB itself, **Redis** and **Celery** make the
 app fast and non-blocking, **Pandas/OpenPyXL** turn rows into a real
-spreadsheet, **Pytest** proves it all still works, and **Docker**/**AWS** are
-just increasingly realistic places to run the exact same code.
-```
+spreadsheet, **Pytest** proves it all still works, **Docker**/**AWS** are just
+increasingly realistic places to run the exact same code, and **Sections
+19–20** apply the identical request → logic → data shape to a language model
+instead of a database — grounding it in real rows (RAG), letting it act
+(agents), and giving it a second, real vector database (Qdrant) to retrieve
+from.
