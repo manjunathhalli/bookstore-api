@@ -53,7 +53,20 @@
                 <h2>Orders</h2>
                 <p class="muted">Total orders placed across the store. <span class="pill">{{ stats.orders }}</span></p>
             </a>
+            <a class="card dash-card" href="/reports">
+                <div class="ico">📊</div>
+                <h2>Reports</h2>
+                <p class="muted">Export a sales report to Excel (via Celery + Pandas).</p>
+            </a>
         {% endif %}
+
+        <a class="card dash-card" href="/ai">
+            <div class="ico">✨</div>
+            <h2>AI Features</h2>
+            <p class="muted">
+                {{ 'Descriptions, forecasting, chatbot, search & more.' if role == 'admin' else 'Chatbot, smart search & personalised picks.' }}
+            </p>
+        </a>
 
         <a class="card dash-card" href="/password">
             <div class="ico">🔑</div>

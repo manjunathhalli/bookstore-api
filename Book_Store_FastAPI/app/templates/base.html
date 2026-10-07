@@ -95,6 +95,7 @@
                 <nav>
                     <a href="/dashboard" class="{{ 'active' if path == '/dashboard' else '' }}">Dashboard</a>
                     <a href="/books" class="{{ 'active' if path.startswith('/books') else '' }}">Books</a>
+                    <a href="/ai" class="{{ 'active' if path.startswith('/ai') else '' }}">✨ AI</a>
                     {% if current_user.role == 'user' %}
                         <a href="/cart" class="{{ 'active' if path.startswith('/cart') else '' }}">Cart</a>
                         <a href="/wishlist" class="{{ 'active' if path.startswith('/wishlist') else '' }}">Wishlist</a>
@@ -105,6 +106,7 @@
                     {% if current_user.role == 'admin' %}
                         <a href="/users" class="{{ 'active' if path.startswith('/users') else '' }}">Users</a>
                         <a href="/orders" class="{{ 'active' if path.startswith('/orders') else '' }}">Orders</a>
+                        <a href="/reports" class="{{ 'active' if path.startswith('/reports') else '' }}">Reports</a>
                     {% endif %}
                     <a href="/password" class="{{ 'active' if path.startswith('/password') else '' }}">Password</a>
                 </nav>

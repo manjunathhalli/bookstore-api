@@ -1,0 +1,12 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.git/
+.env
+qdrant_storage/
+app/static/book-covers/*
+app/static/reports/*
+*.docx
+_alembic_test.db

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block h1 %}{{ title }}{% endblock %}
+{% block subtitle %}{{ subtitle }}{% endblock %}
+
+{% block content %}
+    {% if not ai_enabled %}
+        <div class="alert alert-error">
+            {% if mode == 'semantic' %}
+                Semantic search needs the local embedding model
+                (<code>pip install fastembed</code>) and indexed books.
+            {% else %}
+                This feature needs a Claude API key (<code>ANTHROPIC_API_KEY</code>).
+            {% endif %}
+        </div>
+    {% endif %}
+
+    <style>
+        .search-suggest { margin-top: 12px; }
+        .search-suggest-label { font-size: .72rem; opacity: .65; margin-bottom: 6px; }
+        .search-suggest-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+        .suggestion-chip {
+            font-size: .8rem; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+            border: 1px solid var(--border); background: rgba(148,163,184,.14);
+            color: inherit; line-height: 1.3; text-align: left;
+        }
+        .suggestion-chip:hover { background: rgba(37,99,235,.18); border-color: rgba(37,99,235,.5); }
+    </style>
+
+    <div class="card">
+        <form action="{{ action }}" method="GET" id="search-form" style="display: flex; gap: 10px; align-items: flex-end;">
+            <div style="flex: 1;">
+                <label for="q">Your query</label>
+                <input type="text" name="q" id="q" value="{{ query }}"
+                       placeholder="{{ 'overcoming fear and building confidence' if mode == 'semantic' else 'cheap thrillers under 500' }}"
+                       style="margin-bottom: 0;">
+            </div>
+            <button type="submit">Search</button>
+        </form>
+
+        {% if suggestions %}
+            <div class="search-suggest">
+                <div class="search-suggest-label">💡 Try:</div>
+                <div class="search-suggest-chips">
+                    {% for s in suggestions %}
+                        <button type="button" class="suggestion-chip" data-q="{{ s }}">{{ s }}</button>
+                    {% endfor %}
+                </div>
+            </div>
+            <script>
+                document.querySelectorAll('.suggestion-chip').forEach((chip) => {
+                    chip.addEventListener('click', () => {
+                        document.getElementById('q').value = chip.dataset.q;
+                        document.getElementById('search-form').submit();
+                    });
+                });
+            </script>
+        {% endif %}
+
+        {% if mode == 'semantic' %}
+            <form action="/ai/reindex-embeddings" method="POST" style="margin-top: 12px;">
+                <button type="submit" class="ghost">Reindex embeddings (admin)</button>
+                <span class="muted">Generates vectors for any books missing one.</span>
+            </form>
+        {% endif %}
+
+        {% if filters %}
+            <p class="muted" style="margin-top: 12px;">
+                Parsed filters:
+                {% for k, v in filters.items() %}<span class="pill">{{ k }}: {{ v }}</span> {% endfor %}
+            </p>
+        {% endif %}
+    </div>
+
+    {% if query %}
+        {% if mode == 'smart' %}
+            <div class="card" style="background: rgba(99,102,241,.08);">
+                <strong>🔎 How this worked (intent parsing, not RAG):</strong>
+                <p class="muted" style="margin-top: 6px;">
+                    One LLM call turned your sentence into the structured filter JSON shown above
+                    (<code>app/ai/service.py::parse_search_filters</code>) — the model never touches the
+                    book rows themselves. Those filters then ran as a <strong>normal SQL query</strong>
+                    (SQLAlchemy <code>WHERE</code>/sort), exactly like a manual filter form would.
+                    {% if not filters %}The model returned no usable filters for this query, so every book matched.{% endif %}
+                </p>
+            </div>
+        {% elif mode == 'semantic' and books %}
+            <div class="card" style="background: rgba(110,231,183,.08);">
+                <strong>🧠 How this worked (embeddings + cosine similarity):</strong>
+                <p class="muted" style="margin-top: 6px;">
+                    Your query was embedded locally into a 384-number vector (<code>all-MiniLM-L6-v2</code>,
+                    no API call), then compared against every book's pre-computed embedding with
+                    <strong>cosine similarity</strong> — the "Match" % below. 100% would mean an identical
+                    vector; results are ranked purely by closeness in meaning, so a match can score high
+                    even with <em>zero shared keywords</em> with your query.
+                </p>
+            </div>
+        {% endif %}
+        <div class="card">
+            <h2>Results ({{ books|length }})</h2>
+            {% if books %}
+                <table>
+                    <thead>
+                        <tr><th>#</th><th>Name</th><th>Author</th><th>Price</th>
+                            {% if mode == 'semantic' %}<th>Match</th>{% endif %}</tr>
+                    </thead>
+                    <tbody>
+                        {% for book in books %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ book.name }}</td>
+                                <td>{{ book.author }}</td>
+                                <td>₹{{ "%.2f"|format(book.price|float) }}</td>
+                                {% if mode == 'semantic' %}
+                                    <td><span class="pill">{{ "%.0f"|format((book.score or 0) * 100) }}%</span></td>
+                                {% endif %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="muted">No matches found.</p>
+            {% endif %}
+        </div>
+    {% endif %}
+{% endblock %}

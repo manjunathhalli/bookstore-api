@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+{% block title %}AI Features{% endblock %}
+{% block h1 %}✨ AI Features{% endblock %}
+{% block subtitle %}Claude-powered tools layered on top of the same catalogue and database.{% endblock %}
+
+{% block content %}
+    {% if not ai_enabled %}
+        <div class="alert alert-error">
+            The AI API key is not configured. Set <code>{{ config_key|default('GROQ_API_KEY') }}</code> in your
+            <code>.env</code> to activate these features.
+        </div>
+    {% endif %}
+
+    <div class="grid">
+        <a class="card dash-card" href="/ai/chat">
+            <div class="ico">🤖</div>
+            <h2>AI Chatbot (Agent)</h2>
+            <p class="muted">LangChain agent — picks tools for books, your orders, or live weather.</p>
+        </a>
+
+        <a class="card dash-card" href="/ai/rag-chat">
+            <div class="ico">💬</div>
+            <h2>AI Chatbot (RAG)</h2>
+            <p class="muted">Classic RAG — “BookBot” answers grounded only in real books &amp; your orders.</p>
+        </a>
+
+        <a class="card dash-card" href="/ai/graph-chat">
+            <div class="ico">🕸️</div>
+            <h2>AI Chatbot (LangGraph)</h2>
+            <p class="muted">Same tools as the Agent bot, as an explicit graph — big orders pause for your confirmation.</p>
+        </a>
+
+        <a class="card dash-card" href="/bc/chat">
+            <div class="ico">📊</div>
+            <h2>Business Central Chatbot</h2>
+            <p class="muted">RAG over Microsoft Business Central data stored in a Qdrant vector DB.</p>
+        </a>
+
+        <a class="card dash-card" href="/ai/search">
+            <div class="ico">🔎</div>
+            <h2>Natural-Language Search</h2>
+            <p class="muted">“cheap thrillers under 500” → structured filters over the catalogue.</p>
+        </a>
+
+        <a class="card dash-card" href="/ai/semantic">
+            <div class="ico">🧠</div>
+            <h2>Semantic Search</h2>
+            <p class="muted">Search by meaning using embeddings &amp; cosine similarity.</p>
+        </a>
+
+        <a class="card dash-card" href="/ai/recommendations">
+            <div class="ico">🎯</div>
+            <h2>Recommendations</h2>
+            <p class="muted">Personalised picks from your orders &amp; wishlist, each with a reason.</p>
+        </a>
+
+        {% if is_admin %}
+            <a class="card dash-card" href="/ai/forecast">
+                <div class="ico">📈</div>
+                <h2>Demand Forecasting</h2>
+                <p class="muted">Rank likely-to-sell titles from real order counts + AI reasoning.</p>
+            </a>
+
+            <a class="card dash-card" href="/ai/finetune">
+                <div class="ico">🎛️</div>
+                <h2>Fine-Tuning</h2>
+                <p class="muted">Train a classifier on your own reviews — compare it to the zero-shot LLM.</p>
+            </a>
+        {% endif %}
+
+        <div class="card" style="border-style: dashed; opacity: .92;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div class="ico">⚙️</div>
+                <span class="pill" style="background: rgba(148,163,184,.18); color: var(--muted); border: 1px solid var(--border);">Runs automatically</span>
+            </div>
+            <h2 style="margin-top: 12px;">Behind the scenes</h2>
+            <p class="muted">
+                These features have no page — they run on their own. When you submit a review it is
+                <strong>screened for abuse/spam</strong> and <strong>rated positive, neutral or negative</strong>;
+                when an admin saves a book it is <strong>auto-tagged by genre</strong> and
+                <strong>indexed for semantic search</strong>; and admins can
+                <strong>generate a description</strong> from the add-book form.
+            </p>
+        </div>
+    </div>
+
+    <h2 style="margin-top: 40px;">🧩 How this all works</h2>
+    <p class="muted">
+        Six building blocks, in the order they stack on top of each other. Each one below links to the
+        feature on this page that actually uses it, with the real file/function so you can go read the code.
+    </p>
+
+    <style>
+        .concept-flow { display: flex; flex-direction: column; gap: 0; margin: 20px 0 8px; }
+        .concept-card { border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; background: var(--card-bg, rgba(148,163,184,.06)); }
+        .concept-arrow { text-align: center; color: var(--muted); font-size: 1.3rem; line-height: 1; margin: 2px 0; }
+        .concept-card h3 { margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
+        .concept-card code.path { font-size: .82rem; background: rgba(148,163,184,.18); padding: 1px 6px; border-radius: 5px; }
+        .concept-card pre { margin: 10px 0 0; font-size: .82rem; overflow-x: auto; background: rgba(0,0,0,.25); padding: 10px 12px; border-radius: 8px; }
+        .concept-tag { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    </style>
+
+    <div class="concept-flow">
+
+        <div class="concept-card">
+            <h3>🔢 1. Embeddings</h3>
+            <p class="concept-tag">Text → a vector of numbers</p>
+            <p>
+                An embedding model turns text into a fixed-length list of floats (384 numbers here) such that
+                texts with <em>similar meaning</em> end up as <em>nearby vectors</em> — even if they don't share
+                a single keyword ("space adventure" lands close to "sci-fi voyage story"). This app runs the
+                <code class="path">all-MiniLM-L6-v2</code> model <strong>locally</strong> (via <code class="path">fastembed</code>/ONNX,
+                falling back to <code class="path">sentence-transformers</code>) — no API key, no network call.
+            </p>
+            <p class="muted">Used by: <strong>Semantic Search</strong> (book → vector, stored in the DB) and the
+                <strong>Business Central Chatbot</strong> (each BC record → vector, stored in Qdrant).</p>
+            <pre><code># app/core/ai.py — ClaudeService.embed()
+vector = model.embed(["Dune by Frank Herbert: a desert planet..."])
+# -> [0.0123, -0.081, 0.044, ...]  (384 numbers, unit-length)</code></pre>
+        </div>
+        <div class="concept-arrow">⬇</div>
+
+        <div class="concept-card">
+            <h3>🗄️ 2. Vector DB</h3>
+            <p class="concept-tag">Store vectors, search by "closest meaning"</p>
+            <p>
+                A vector database stores those embeddings and can answer "which stored vectors are closest to
+                <em>this</em> vector?" almost instantly, even over millions of rows — the same job a normal
+                index does for exact matches, but for <em>similarity</em>. This app uses two approaches on
+                purpose, to show both ends of the spectrum:
+            </p>
+            <ul style="margin: 6px 0 0 18px;">
+                <li><strong>Semantic Search</strong> — book embeddings live in a plain MySQL column; similarity is
+                    computed in Python with cosine distance (fine at catalogue scale, zero extra infra).</li>
+                <li><strong>Business Central Chatbot</strong> — BC record embeddings go into
+                    <strong>Qdrant</strong> (<code class="path">app/bc/</code>), a real vector database, run
+                    <strong>embedded</strong> (a local folder, <code class="path">./qdrant_storage</code>) so it
+                    needs no server either.</li>
+            </ul>
+            <pre><code># app/ai/service.py — cosine(), semantic_search()
+score = cosine(query_vector, book.embedding)   # -1..1, higher = more similar
+
+# app/bc/ — Qdrant client, same idea at scale
+qdrant.search(collection_name="business_central", query_vector=vector, limit=8)</code></pre>
+        </div>
+        <div class="concept-arrow">⬇</div>
+
+        <div class="concept-card">
+            <h3>📚 3. RAG (Retrieval-Augmented Generation)</h3>
+            <p class="concept-tag">Retrieve real data, then ask the LLM to answer only from it</p>
+            <p>
+                An LLM only knows what was in its training data — it has never seen <em>this store's</em> books
+                or <em>your</em> orders. RAG fixes that in two steps: <strong>retrieve</strong> the relevant rows
+                (by keyword match, or by the embedding similarity above), then <strong>paste them into the
+                prompt</strong> as grounding context, with an instruction to answer using <em>only</em> that
+                context. The model reasons over real rows instead of guessing — it can't invent a book that
+                isn't in the catalogue.
+            </p>
+            <p class="muted">Used by: <strong>AI Chatbot (RAG)</strong> and the <strong>Business Central Chatbot</strong>.</p>
+            <pre><code># app/ai/service.py — rag_chat_reply()
+catalog = "\n".join(f"- {b.name} by {b.author} (Rs.{b.price})" for b in matching_books)
+system = f"Answer using ONLY the CATALOG below.\nCATALOG:\n{catalog}"
+claude.ask(user_message, system)</code></pre>
+        </div>
+        <div class="concept-arrow">⬇</div>
+
+        <div class="concept-card">
+            <h3>🔗 4. LangChain</h3>
+            <p class="concept-tag">A library for wiring LLMs + tools + prompts together</p>
+            <p>
+                LangChain is a Python framework that standardises the pieces above so you don't hand-roll them:
+                a common interface for any LLM provider (<code class="path">ChatGroq</code>,
+                <code class="path">ChatAnthropic</code>, <code class="path">ChatOllama</code> — swap providers
+                with one line), prompt templates, and — the important part for an <em>agent</em> — a way to
+                describe Python functions as <strong>tools</strong> the model can choose to call.
+            </p>
+            <p class="muted">Used by: <strong>AI Chatbot (Agent)</strong> — <code class="path">app/ai/agent.py</code>.</p>
+            <pre><code># app/ai/agent.py — _make_llm() picks the provider from settings.ai_provider
+if settings.ai_provider == "ollama":
+    llm = ChatOllama(base_url=settings.ollama_base_url, model="qwen2.5")
+elif settings.ai_provider == "groq":
+    llm = ChatGroq(api_key=settings.groq_api_key, model=settings.groq_model)</code></pre>
+        </div>
+        <div class="concept-arrow">⬇</div>
+
+        <div class="concept-card">
+            <h3>🕸️ 5. LangGraph</h3>
+            <p class="concept-tag">LangChain's tool-calling loop, made into an explicit graph</p>
+            <p>
+                LangChain's basic agent loop is a fixed cycle: <em>ask the model → it picks a tool → run the
+                tool → feed the result back → repeat</em>. That's what the plain Agent chatbot does. LangGraph
+                is a companion library that draws that loop as an explicit <strong>graph of nodes and
+                edges</strong> instead — so it can branch. This app uses it for exactly the branch a fixed loop
+                can't express: <strong>a big order needs a human "yes" before it's placed.</strong>
+            </p>
+            <p class="muted">Used by: <strong>AI Chatbot (LangGraph)</strong> — <code class="path">app/ai/graph_agent.py</code>.</p>
+            <pre><code># app/ai/graph_agent.py — the graph
+graph.add_node("agent", call_model)     # LLM decides: reply, or call a tool
+graph.add_node("tools", ToolNode(tools))  # run search_catalog / my_orders / add_to_cart
+graph.add_node("confirm", confirm_node)   # place_order over Rs.2,000 lands HERE instead
+graph.add_conditional_edges("agent", route, {"tools": "tools", "confirm": "confirm", END: END})
+graph.add_edge("tools", "agent")          # tool results go back to the model
+graph.add_edge("confirm", END)            # ...and confirm ends the turn, awaiting "yes"/"no"
+
+# Next message: "yes" -> the order is actually placed; "no" -> cancelled.
+# The plain AgentExecutor loop (Feature 5a) has no node to pause at — it would
+# just place the order immediately. That's the concrete win LangGraph buys here.</code></pre>
+        </div>
+        <div class="concept-arrow">⬇</div>
+
+        <div class="concept-card">
+            <h3>🤖 6. AI Agents</h3>
+            <p class="concept-tag">The LLM decides <em>which action to take</em>, not just what to say</p>
+            <p>
+                Put it all together and you get an <strong>agent</strong>: an LLM given a goal (the user's
+                message) and a set of tools, that decides for itself which tool(s) to call, in what order, and
+                when it has enough information to answer — instead of a developer hand-coding "if the message
+                contains 'weather', call the weather API." The safety model doesn't change: the model never sees
+                SQL or raw data access, only typed Python functions that run parameterised queries scoped to
+                the signed-in user. This app has <strong>two</strong> agents over the identical tool set — a
+                plain LangChain loop, and the LangGraph graph above that adds the order-confirmation branch.
+            </p>
+            <p class="muted">Try it: ask either chatbot "what's the weather in Mysuru and recommend a thriller under 500" — then ask the LangGraph one to order 5 copies of something over Rs.2,000 and watch it pause for confirmation.</p>
+            <pre><code># app/ai/agent.py — the tools both agents choose between
+[weather, search_catalog, my_orders, add_to_cart, place_order]
+# The LLM reads your message, picks zero or more of these, and only THEN replies.</code></pre>
+        </div>
+        <div class="concept-arrow">⬇</div>
+
+        <div class="concept-card">
+            <h3>🎛️ 7. Fine-Tuning</h3>
+            <p class="concept-tag">Don't re-supply knowledge every request — bake it into the model instead</p>
+            <p>
+                Everything above hands the model fresh instructions or data on <em>every single call</em> — a
+                system prompt, retrieved rows, or a tool result. Fine-tuning is the different move: keep
+                training a pretrained representation — just a small classifier head, here — on labelled
+                examples <strong>from this specific business</strong>, so the knowledge lives in the model's
+                weights instead. The trained model then answers instantly: no prompt, no retrieval, no LLM API
+                call at all.
+            </p>
+            <p class="muted">
+                Used by: <strong>Fine-Tuning</strong> (admin) — trains a classifier on this store's own reviews,
+                labelled by what customers actually rated (4-5 ⭐ = Positive, 3 ⭐ = Neutral, 1-2 ⭐ = Negative),
+                <em>not</em> by the zero-shot LLM's own guess in Sentiment Analysis — so the side-by-side
+                comparison it shows is honest. Trade-off vs. RAG: cheap/instant inference and no context to
+                resend, but it needs labelled data up front and stays static until retrained (RAG updates the
+                moment you add a row to the database).
+            </p>
+            <pre><code># app/ai/finetune.py — train()
+vectors = claude.embed_many(review_texts)          # same local embeddings as Semantic Search
+clf = LogisticRegression().fit(vectors, ratings_as_labels)
+joblib.dump(clf, "sentiment_finetuned.joblib")     # saved once, reused for every future prediction
+
+# app/ai/finetune.py — predict() — no LLM call, no network, just this store's model
+clf.predict([claude.embed(new_review_text)])</code></pre>
+        </div>
+
+    </div>
+
+    <h2 style="margin-top: 40px;">🎭 Generative AI vs. Agentic AI vs. AI Agent</h2>
+    <p class="muted">
+        Three terms people use almost interchangeably, but they describe different layers — one builds on the
+        next. Every example below is a real feature on this page, not a hypothetical.
+    </p>
+
+    <style>
+        .compare-table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: .92rem; }
+        .compare-table th, .compare-table td { text-align: left; padding: 10px 12px; border: 1px solid var(--border); vertical-align: top; }
+        .compare-table th { background: rgba(148,163,184,.14); }
+        .compare-table td:first-child { white-space: nowrap; font-weight: 600; }
+    </style>
+
+    <div style="overflow-x: auto;">
+        <table class="compare-table">
+            <thead>
+                <tr><th>Term</th><th>What it actually is</th><th>Can it take actions?</th><th>Example on this page</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>🧬 Generative AI</td>
+                    <td>A model that turns a prompt into new content — text in, text (or JSON) out. One call, no memory, no tools.</td>
+                    <td>No — it only <em>describes</em>, never <em>does</em>.</td>
+                    <td>Book Description Generator, Review Summarization, Auto-Tagging, Demand Forecasting, AI Chatbot (RAG)</td>
+                </tr>
+                <tr>
+                    <td>🤖 AI Agent</td>
+                    <td>Generative AI + a set of callable tools + a loop: the model decides <em>which</em> tool(s) to call, runs them, and reasons over the result before replying.</td>
+                    <td>Yes — within the tools it's given.</td>
+                    <td>AI Chatbot (Agent) and AI Chatbot (LangGraph) — both choose from <code class="path">[weather, search_catalog, my_orders, add_to_cart, place_order]</code></td>
+                </tr>
+                <tr>
+                    <td>🕸️ Agentic AI</td>
+                    <td>The system-level design paradigm: an application built around multi-step, stateful, <em>branching</em> decisions — of which an "AI Agent" is one building block, not the whole picture.</td>
+                    <td>Yes — plus it can pause, remember, and change course.</td>
+                    <td>The LangGraph graph's branch-to-confirm + cross-turn memory (below)</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="concept-flow">
+
+        <div class="concept-card">
+            <h3>🧬 Generative AI</h3>
+            <p class="concept-tag">Prompt in → content out. No tools, no actions, no memory.</p>
+            <p>
+                This is the layer everything else is built on: one call to an LLM that generates text or
+                structured JSON from a prompt, and stops. It doesn't know what a "cart" is and can't check
+                anything live — it only writes. Six separate features on this page are exactly this, nothing more:
+            </p>
+            <ul style="margin: 6px 0 0 18px;">
+                <li><strong>Book Description Generator</strong> (admin, add-book form) — writes 40–60 words of marketing copy from a title + author.</li>
+                <li><strong>Review Summarization</strong> — condenses up to 50 reviews into a balanced 2–3 sentence summary.</li>
+                <li><strong>Auto-Tagging</strong> — writes 1–4 genre tags for a new book.</li>
+                <li><strong>Demand Forecasting</strong> — writes a trend + reason per book from real order counts.</li>
+                <li><strong>Sentiment / Moderation</strong> — classifies a review as Positive/Neutral/Negative, or Safe/Unsafe.</li>
+                <li><strong>AI Chatbot (RAG)</strong> — writes an answer from retrieved context; it can talk about your orders, but can't touch them.</li>
+            </ul>
+            <pre><code># app/ai/service.py — generate_description() — the shape of every one of these
+claude.ask(
+    f'Write a description for "{name}" by {author}.',
+    system="You are a bookstore copywriter. 40-60 words. No headings.",
+)
+# -> one string back. No tool was available to call; there was nothing TO call.</code></pre>
+        </div>
+        <div class="concept-arrow">⬇</div>
+
+        <div class="concept-card">
+            <h3>🤖 AI Agent</h3>
+            <p class="concept-tag">Generative AI + tools + a decide-then-act loop</p>
+            <p>
+                Give that same generative model a list of Python functions it's allowed to call ("tools"), and
+                a loop that feeds tool results back to it, and it stops being a text generator and becomes an
+                <strong>agent</strong>: something that can actually search the catalogue, look up your real
+                orders, add a book to your cart, or place an order — not just describe doing so.
+            </p>
+            <p class="muted">Both chatbots on this page are AI Agents over the identical tool set — they only differ in how the loop is wired (see LangChain vs. LangGraph above).</p>
+            <pre><code># app/ai/agent.py — what makes it an AGENT, not just generative AI
+tools = [weather, search_catalog, my_orders, add_to_cart, place_order]
+executor = AgentExecutor(agent=create_tool_calling_agent(llm, tools, prompt), tools=tools)
+executor.invoke({"input": "add Clean Code to my cart"})
+# -> the model picks add_to_cart, it actually runs, THEN the model replies.
+# Compare to generative AI above: there, "add it to my cart" would just get
+# talked about. Here, it happens.</code></pre>
+        </div>
+        <div class="concept-arrow">⬇</div>
+
+        <div class="concept-card">
+            <h3>🕸️ Agentic AI</h3>
+            <p class="concept-tag">The system, not the model — branching, memory, and pausing for approval</p>
+            <p>
+                "Agentic AI" is the broader claim: not just that a model can call a tool, but that the whole
+                <em>application</em> is designed around autonomous, multi-step decision-making — with state that
+                persists across turns, branches that change the path based on what happened, and (when the
+                stakes are high enough) a deliberate pause for a human. A single AI Agent call is one decision;
+                an agentic system is a sequence of them with memory in between. This page's clearest example is
+                the LangGraph chatbot's own conversation, captured live:
+            </p>
+            <ol style="margin: 6px 0 0 18px;">
+                <li>You: <em>"Order 5 copies of The Midnight Library"</em> → the agent adds it to your cart and asks if you want to check out.</li>
+                <li>You: <em>"yes"</em> → using its short memory of turn 1, it now calls <code class="path">place_order</code> for ₹6,995 — <strong>over the ₹2,000 threshold</strong>, so the graph branches to the <code class="path">confirm</code> node instead of buying immediately, and asks you to actually confirm.</li>
+                <li>You: <em>"yes"</em> again → <em>this</em> time no LLM call happens at all — the pending order is resolved directly — and the order is placed (or, as in testing, it correctly reports "you have no saved address yet" instead of crashing).</li>
+            </ol>
+            <p class="muted">That's agentic: the same words ("yes") did two completely different things depending on state the system remembered — a plain one-shot generative call could never do that.</p>
+            <pre><code># app/ai/graph_agent.py — the state that makes it "agentic", not just "an agent"
+_pending: dict[int, dict] = {}   # order awaiting a human "yes"/"no", per user
+_history: dict[int, list] = {}  # short conversation memory, per user
+
+if lower in _CONFIRM_WORDS:       # "yes" resolves a PENDING order directly —
+    place_order.invoke(pending)   # no LLM call needed, the decision already happened</code></pre>
+        </div>
+
+    </div>
+{% endblock %}

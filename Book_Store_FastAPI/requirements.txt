@@ -9,6 +9,34 @@ PyJWT==2.10.1
 python-multipart==0.0.20
 Jinja2==3.1.5
 itsdangerous==2.2.0
+httpx==0.28.1
 pydantic-settings==2.7.1
 email-validator==2.2.0
 python-dotenv==1.0.1
+fastembed==0.8.0  # local embeddings via ONNX runtime — preferred; works under Windows Smart App Control (torch DLLs are blocked there)
+sentence-transformers==3.3.1  # fallback embedding backend (PyTorch); requires loadable torch DLLs
+# --- LangChain agent for the AI chatbot (Feature 5) ---
+langchain==0.3.14
+langchain-groq==0.2.3          # free tool-calling backend (default)
+langchain-anthropic==0.3.1     # optional paid backend (AI_PROVIDER=anthropic)
+langchain-ollama==0.2.2        # local, key-less backend (AI_PROVIDER=ollama)
+langgraph==0.2.76              # explicit graph agent (Feature 5c — app/ai/graph_agent.py)
+langgraph-prebuilt==0.2.3      # ToolNode — pinned to match langchain-core 0.3.x above
+# --- Fine-tuning (Feature 11 — app/ai/finetune.py) ---
+scikit-learn==1.9.0            # classifier head trained on local embeddings; joblib (dep) persists it
+# --- Business Central RAG chatbot (separate feature) ---
+qdrant-client==1.12.1          # vector DB client (local Docker or Qdrant Cloud)
+
+# --- Schema migrations (Feature: Alembic) ---
+alembic==1.14.0
+
+# --- Cache + background jobs (Features: Redis, Celery) ---
+redis==5.2.1
+celery==5.4.0
+
+# --- Reporting (Feature: Pandas / OpenPyXL) ---
+pandas==2.2.3
+openpyxl==3.1.5
+
+# --- Tests (Feature: Pytest) ---
+pytest==8.3.4

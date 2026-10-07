@@ -13,6 +13,19 @@
         </div>
     {% endif %}
 
+    {% if sentiment %}
+        <div class="card" style="background: rgba(110,231,183,.10); border-color: rgba(110,231,183,.35);">
+            <strong>🧠 AI sentiment analysis</strong> read your review text and labelled it
+            <span class="pill">{{ sentiment.sentiment or 'unavailable' }}</span>
+            <p class="muted" style="margin-top: 6px;">
+                This is a separate, independent read of <em>what you wrote</em> (one fast LLM call,
+                <code>app/ai/service.py::analyze_sentiment</code>) — not derived from the
+                {{ sentiment.rating }}★ you picked. It also ran through
+                <strong>content moderation</strong> first (SAFE/UNSAFE) before being saved at all.
+            </p>
+        </div>
+    {% endif %}
+
     <div class="grid">
         {# Submit Feedback #}
         <div class="card">
@@ -50,6 +63,12 @@
                 <button type="submit">Get Average Rating</button>
             </form>
 
+            {# AI Feature 3 — summarize all reviews for the selected book #}
+            <button type="button" class="ghost" id="ai-summary-btn" style="margin-top: 10px;">
+                ✨ AI Review Summary
+            </button>
+            <div id="ai-summary" class="muted" style="margin-top: 10px;"></div>
+
             {% if lookup %}
                 {% set lr = (lookup.rating|round|int) %}
                 <div class="card" style="background: rgba(99,102,241,.12); border-color: rgba(99,102,241,.35); margin-top: 16px;">
@@ -57,9 +76,53 @@
                         <strong>{{ lookup.book }}</strong> —
                         <span class="stars">{{ '★' * lr }}{{ '☆' * (5 - lr) }}</span>
                         <strong>{{ "%.2f"|format(lookup.rating) if lookup.rating else 'No ratings yet' }}</strong>
+                        {% if lookup.sentiment_counts %}
+                            <p class="muted" style="margin-top: 10px;">
+                                🧠 AI sentiment of its reviews:
+                                {% for label in ['Positive', 'Neutral', 'Negative'] %}
+                                    {% if lookup.sentiment_counts.get(label) %}
+                                        <span class="pill">{{ label }}: {{ lookup.sentiment_counts[label] }}</span>
+                                    {% endif %}
+                                {% endfor %}
+                                — one classifier call per review at submit time, tallied here.
+                            </p>
+                        {% endif %}
                     {% else %}<span class="muted">Book not found.</span>{% endif %}
                 </div>
             {% endif %}
         </div>
     </div>
+
+    <script>
+        // AI Feature 3 — fetch a Claude summary of a book's reviews.
+        const sumBtn = document.getElementById('ai-summary-btn');
+        if (sumBtn) {
+            sumBtn.addEventListener('click', async () => {
+                const bookId = document.getElementById('lookup_book_id').value;
+                const out = document.getElementById('ai-summary');
+                if (!bookId) { out.textContent = 'Select a book above first.'; return; }
+                out.textContent = 'Summarizing reviews…';
+                try {
+                    const body = new URLSearchParams({ book_id: bookId });
+                    const res = await fetch('/ai/reviews/summary', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body,
+                    });
+                    const data = await res.json();
+                    out.textContent = '';
+                    out.appendChild(document.createTextNode(data.summary || 'No summary available.'));
+                    if (data.count) {
+                        const note = document.createElement('p');
+                        note.className = 'muted';
+                        note.style.marginTop = '6px';
+                        note.textContent = `📚 Condensed from the ${data.count} real review(s) stored for this book — not invented.`;
+                        out.appendChild(note);
+                    }
+                } catch (err) {
+                    out.textContent = 'Could not load the summary.';
+                }
+            });
+        }
+    </script>
 {% endblock %}

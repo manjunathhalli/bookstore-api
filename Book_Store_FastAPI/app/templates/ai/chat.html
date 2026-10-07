@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% set post_url = post_url|default('/ai/chat') %}
+{% set config_key = config_key|default('ANTHROPIC_API_KEY') %}
+{% set suggestions = suggestions|default([]) %}
+{% block title %}{{ chat_page_title|default('AI Chatbot') }}{% endblock %}
+{% block h1 %}{{ chat_h1|default('💬 BookBot') }}{% endblock %}
+{% block subtitle %}{{ chat_subtitle|default('Ask about titles, authors or genres — answers come from our real catalogue.') }}{% endblock %}
+
+{% block content %}
+    {% if not ai_enabled %}
+        <div class="alert alert-error">The AI assistant is not configured (set <code>{{ config_key }}</code>).</div>
+    {% endif %}
+
+    <style>
+        .chat-row { display: flex; width: 100%; }
+        .chat-row.left  { justify-content: flex-start; }
+        .chat-row.right { justify-content: flex-end; }
+        .chat-bubble {
+            max-width: 75%;
+            padding: 10px 14px;
+            border-radius: 16px;
+            line-height: 1.45;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+        .chat-bubble.bot {
+            background: rgba(148,163,184,.18);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px;
+        }
+        .chat-bubble.user {
+            background: var(--accent, #2563eb);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .chat-name { font-size: .72rem; opacity: .7; margin-bottom: 3px; }
+        .chat-trace {
+            font-size: .72rem; opacity: .75; margin-top: 6px; padding-top: 6px;
+            border-top: 1px dashed rgba(255,255,255,.25); line-height: 1.5;
+        }
+        .chat-trace div { white-space: normal; }
+        .chat-suggest { margin-top: 12px; }
+        .chat-suggest-label { font-size: .72rem; opacity: .65; margin-bottom: 6px; }
+        .chat-suggest-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+        .suggestion-chip {
+            font-size: .8rem; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+            border: 1px solid var(--border); background: rgba(148,163,184,.14);
+            color: inherit; line-height: 1.3; text-align: left;
+        }
+        .suggestion-chip:hover { background: rgba(37,99,235,.18); border-color: rgba(37,99,235,.5); }
+        .suggestion-chip:disabled { opacity: .5; cursor: default; }
+    </style>
+
+    <div class="card">
+        <div id="chat-box" style="height: 400px; overflow-y: auto; padding: 6px 4px; display: flex; flex-direction: column; gap: 10px;">
+            <div class="chat-row left">
+                <div class="chat-bubble bot">👋 Hi! Ask me things like “recommend a mystery under 400”, “books by Rowling”, or about your orders — “what have I ordered?” or “what’s my last order number?”.</div>
+            </div>
+        </div>
+
+        {% if suggestions %}
+            <div class="chat-suggest">
+                <div class="chat-suggest-label">💡 Try asking:</div>
+                <div class="chat-suggest-chips">
+                    {% for s in suggestions %}
+                        <button type="button" class="suggestion-chip" data-msg="{{ s }}">{{ s }}</button>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+
+        <form id="chat-form" style="display: flex; gap: 10px; margin-top: 14px;">
+            <input id="chat-input" placeholder="Ask about books…" autocomplete="off" style="flex: 1; margin-bottom: 0;">
+            <button type="submit">Send</button>
+        </form>
+    </div>
+
+    <script>
+        const box = document.getElementById('chat-box');
+        const form = document.getElementById('chat-form');
+        const input = document.getElementById('chat-input');
+
+        function bubble(who, text, side) {
+            const row = document.createElement('div');
+            row.className = 'chat-row ' + side;
+            const el = document.createElement('div');
+            el.className = 'chat-bubble ' + (side === 'right' ? 'user' : 'bot');
+            const name = document.createElement('div');
+            name.className = 'chat-name';
+            name.textContent = who;
+            const body = document.createElement('div');
+            body.className = 'chat-body';
+            body.textContent = text;
+            el.appendChild(name);
+            el.appendChild(body);
+            row.appendChild(el);
+            box.appendChild(row);
+            box.scrollTop = box.scrollHeight;
+            return { el, body };
+        }
+
+        function renderTrace(el, trace) {
+            if (!trace || !trace.length) return;
+            const box = document.createElement('div');
+            box.className = 'chat-trace';
+            const label = document.createElement('div');
+            label.textContent = '🔧 how it answered:';
+            box.appendChild(label);
+            trace.forEach((step) => {
+                const line = document.createElement('div');
+                line.textContent = '• ' + step;
+                box.appendChild(line);
+            });
+            el.appendChild(box);
+        }
+
+        async function sendMessage(msg) {
+            msg = (msg || '').trim();
+            if (!msg) return;
+            bubble('You', msg, 'right');
+            input.value = '';
+            const thinking = bubble('BookBot', 'thinking…', 'left');
+            try {
+                const res = await fetch('{{ post_url }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: msg }),
+                });
+                const data = await res.json();
+                thinking.body.textContent = data.reply || '…';
+                renderTrace(thinking.el, data.trace);
+            } catch (err) {
+                thinking.body.textContent = 'Sorry, something went wrong.';
+            }
+            box.scrollTop = box.scrollHeight;
+        }
+
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            sendMessage(input.value);
+        });
+
+        document.querySelectorAll('.suggestion-chip').forEach((chip) => {
+            chip.addEventListener('click', () => sendMessage(chip.dataset.msg));
+        });
+    </script>
+{% endblock %}

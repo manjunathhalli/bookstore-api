@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block h1 %}Reports{% endblock %}
+{% block subtitle %}Generate a sales report as an Excel file — built in the background by Celery.{% endblock %}
+
+{% block content %}
+    <div class="card" style="max-width: 560px;">
+        <h2>Orders → Excel</h2>
+        <p class="muted">
+            Every order, joined with its book and customer, exported to a
+            spreadsheet with <strong>Pandas</strong> and written out with
+            <strong>OpenPyXL</strong>. The build runs on a Celery worker so
+            this page never blocks on it — click, then watch the status below.
+        </p>
+        <button type="button" id="gen-btn">Generate report</button>
+        <p id="gen-status" class="muted" style="margin-top: 14px;"></p>
+    </div>
+
+    <script>
+        const btn = document.getElementById('gen-btn');
+        const status = document.getElementById('gen-status');
+        let pollTimer = null;
+
+        function poll(taskId) {
+            fetch(`/reports/orders/export/${taskId}`)
+                .then((res) => res.json())
+                .then((data) => {
+                    if (data.state === 'SUCCESS') {
+                        clearInterval(pollTimer);
+                        status.innerHTML =
+                            `✅ Done — ${data.rows} row(s). ` +
+                            `<a href="${data.download_url}" download>Download ${data.filename}</a>`;
+                        btn.disabled = false;
+                    } else if (data.state === 'FAILURE') {
+                        clearInterval(pollTimer);
+                        status.textContent = `❌ Failed: ${data.error}`;
+                        btn.disabled = false;
+                    } else {
+                        status.textContent = `⏳ ${data.state}…`;
+                    }
+                })
+                .catch(() => {
+                    clearInterval(pollTimer);
+                    status.textContent = '❌ Lost contact with the server.';
+                    btn.disabled = false;
+                });
+        }
+
+        btn.addEventListener('click', () => {
+            btn.disabled = true;
+            status.textContent = 'Queuing the task…';
+            fetch('/reports/orders/export', { method: 'POST' })
+                .then((res) => res.json())
+                .then((data) => {
+                    if (!data.task_id) {
+                        status.textContent = `❌ ${data.error || 'Could not queue the report.'}`;
+                        btn.disabled = false;
+                        return;
+                    }
+                    status.textContent = '⏳ PENDING…';
+                    pollTimer = setInterval(() => poll(data.task_id), 1500);
+                })
+                .catch(() => {
+                    status.textContent = '❌ Could not reach the Celery worker. Is it running?';
+                    btn.disabled = false;
+                });
+        });
+    </script>
+{% endblock %}

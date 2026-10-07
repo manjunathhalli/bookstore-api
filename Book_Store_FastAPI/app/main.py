@@ -6,40 +6,37 @@ Two interfaces, exactly like the original:
 
 Both share the same SQLAlchemy models and can run against the same MySQL
 database the Laravel app uses (book_store_product).
+
+The codebase is organised feature-first: each domain package (auth, books,
+cart, wishlist, address, orders, feedback, dashboard, users, password) owns its
+own models / schemas / routers, while cross-cutting concerns live in app.core.
 """
 
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from .config import settings
-from .database import Base, engine
-from .deps import RedirectException
-from .templating import flash, flash_errors
-from .routers.api import address as api_address
-from .routers.api import auth as api_auth
-from .routers.api import books as api_books
-from .routers.api import cart as api_cart
-from .routers.api import feedback as api_feedback
-from .routers.api import orders as api_orders
-from .routers.api import wishlist as api_wishlist
-from .routers.web import address as web_address
-from .routers.web import auth as web_auth
-from .routers.web import books as web_books
-from .routers.web import cart as web_cart
-from .routers.web import dashboard as web_dashboard
-from .routers.web import feedback as web_feedback
-from .routers.web import orders as web_orders
-from .routers.web import password as web_password
-from .routers.web import users as web_users
-from .routers.web import wishlist as web_wishlist
-
-# Import models so create_all sees them.
-from . import models  # noqa: F401
+from app.address import api as address_api, web as address_web
+from app.ai import api as ai_api, web as ai_web
+from app.auth import api as auth_api, web as auth_web
+from app.auth.dependencies import RedirectException
+from app.bc import api as bc_api, web as bc_web
+from app.books import api as books_api, web as books_web
+from app.cart import api as cart_api, web as cart_web
+from app.core.config import settings
+from app.core.database import Base, engine, ensure_ai_columns
+from app.core.templating import flash, flash_errors
+from app.dashboard import web as dashboard_web
+from app.feedback import api as feedback_api, web as feedback_web
+from app.orders import api as orders_api, web as orders_web
+from app.password import web as password_web
+from app.reports import api as reports_api, web as reports_web
+from app.users import web as users_web
+from app.wishlist import api as wishlist_api, web as wishlist_web
 
 app = FastAPI(title=f"{settings.app_name} API", version="1.0.0")
 
@@ -48,6 +45,7 @@ app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, max_age=60
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)
 (STATIC_DIR / "book-covers").mkdir(exist_ok=True)
+(STATIC_DIR / "reports").mkdir(exist_ok=True)  # Feature: Pandas/OpenPyXL report output
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
@@ -55,6 +53,8 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 def on_startup():
     if settings.create_tables:
         Base.metadata.create_all(bind=engine)
+    # Add AI columns (sentiment / tags / embedding) to pre-existing tables.
+    ensure_ai_columns()
 
 
 # --------------------------------------------------------------------------- #
@@ -76,8 +76,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     # API requests get FastAPI's default JSON; web form posts get a friendly
     # flash + redirect back to where they came from.
     if request.url.path.startswith("/api"):
-        from fastapi.responses import JSONResponse
-
         return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
     messages = []
@@ -94,12 +92,15 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 # --------------------------------------------------------------------------- #
 
 # JWT REST API (parity with routes/api.php)
-for r in (api_auth, api_books, api_cart, api_wishlist, api_address, api_orders, api_feedback):
-    app.include_router(r.router, prefix="/api")
+for module in (
+    auth_api, books_api, cart_api, wishlist_api, address_api, orders_api, feedback_api,
+    ai_api, bc_api, reports_api,
+):
+    app.include_router(module.router, prefix="/api")
 
 # Session web UI (parity with routes/web.php)
-for r in (
-    web_auth, web_dashboard, web_books, web_cart, web_wishlist,
-    web_address, web_orders, web_feedback, web_users, web_password,
+for module in (
+    auth_web, dashboard_web, books_web, cart_web, wishlist_web,
+    address_web, orders_web, feedback_web, users_web, password_web, ai_web, bc_web, reports_web,
 ):
-    app.include_router(r.router)
+    app.include_router(module.router)

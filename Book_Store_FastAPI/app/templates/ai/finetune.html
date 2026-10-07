@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Fine-Tuning{% endblock %}
+{% block h1 %}🎛️ Fine-Tuning{% endblock %}
+{% block subtitle %}Train a small classifier on this store's own reviews — no LLM call needed at prediction time.{% endblock %}
+
+{% block content %}
+    {% if not embeddings_enabled %}
+        <div class="alert alert-error">
+            Fine-tuning needs the local embedding backend (install <code>fastembed</code>) — the same one
+            Semantic Search uses.
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <h2>1. Training data</h2>
+        <p class="muted">
+            The label is this store's own ground truth — each review's star rating (4-5 ⭐ = Positive,
+            3 ⭐ = Neutral, 1-2 ⭐ = Negative) — not the zero-shot LLM's guess from the Sentiment Analysis
+            feature, so the comparison below is a fair one.
+        </p>
+        <div class="row" style="margin-top: 14px;">
+            <div>
+                <span class="pill">Positive: {{ stats.counts.Positive }}</span>
+            </div>
+            <div>
+                <span class="pill">Neutral: {{ stats.counts.Neutral }}</span>
+            </div>
+            <div>
+                <span class="pill">Negative: {{ stats.counts.Negative }}</span>
+            </div>
+            <div>
+                <span class="muted">{{ stats.total }} labelled review(s) total</span>
+            </div>
+        </div>
+        {% if not stats.ready %}
+            <p class="muted" style="margin-top: 14px;">
+                Need at least {{ stats.min_per_class }} reviews per sentiment before training — collect a few
+                more reviews on the Feedback page and come back.
+            </p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2>2. Train (fine-tune)</h2>
+        {% if stats.meta %}
+            <p class="muted">
+                Last trained {{ stats.meta.trained_at }} on {{ stats.meta.n_examples }} reviews —
+                {{ 'holdout' if stats.meta.holdout else 'train' }} accuracy
+                <strong>{{ "%.0f"|format(stats.meta.accuracy * 100) }}%</strong>.
+            </p>
+        {% else %}
+            <p class="muted">Not trained yet.</p>
+        {% endif %}
+        <form method="POST" action="/ai/finetune/train" style="margin-top: 14px;">
+            <button type="submit" {{ 'disabled' if not stats.ready or not embeddings_enabled }}>
+                {{ 'Retrain' if stats.trained else 'Train classifier' }}
+            </button>
+        </form>
+    </div>
+
+    {% if stats.meta %}
+        <div class="card">
+            <h2>3. Model performance</h2>
+            <p class="muted">
+                {{ 'Graded on a held-out 25% test split the model never trained on.' if stats.meta.holdout else
+                   'Dataset is still small, so this is train accuracy (graded on the same rows it trained on) — retrain with more reviews for an honest held-out score.' }}
+            </p>
+
+            <h3 style="margin: 18px 0 8px; font-size: .95rem;">Confusion matrix</h3>
+            <p class="muted" style="margin-bottom: 10px;">
+                Each row is what the customer actually rated; each column is what the model predicted. A perfect
+                model would have every count on the diagonal (highlighted).
+            </p>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Actual ↓ / Predicted →</th>
+                            {% for label in ['Negative', 'Neutral', 'Positive'] %}<th>{{ label }}</th>{% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for actual in ['Negative', 'Neutral', 'Positive'] %}
+                            <tr>
+                                <td><strong>{{ actual }}</strong></td>
+                                {% for predicted in ['Negative', 'Neutral', 'Positive'] %}
+                                    <td {% if predicted == actual %}style="background: rgba(110,231,183,.14); font-weight: 700;"{% endif %}>
+                                        {{ stats.meta.confusion[actual][predicted] }}
+                                    </td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <h3 style="margin: 18px 0 8px; font-size: .95rem;">Recall per class</h3>
+            <p class="muted" style="margin-bottom: 10px;">
+                Of the reviews that were actually this sentiment, the percentage the model correctly caught.
+            </p>
+            <div class="row">
+                {% for label in ['Negative', 'Neutral', 'Positive'] %}
+                    {% set recall = stats.meta.per_class_recall[label] %}
+                    <div>
+                        <span class="pill">{{ label }}: {{ "%.0f"|format(recall * 100) + '%' if recall is not none else 'n/a' }}</span>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>4. Training examples used</h2>
+            <p class="muted">
+                Every review that fed this run, with its ground-truth label (from the star rating) and which
+                split it landed in. "held out" rows were never seen during training — they're what the accuracy
+                and confusion matrix above are graded on.
+            </p>
+            <div style="overflow-x: auto; margin-top: 14px;">
+                <table>
+                    <thead>
+                        <tr><th>Review</th><th>Label</th><th>Split</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for ex in stats.meta.examples %}
+                            <tr>
+                                <td>{{ ex.text }}</td>
+                                <td><span class="pill">{{ ex.label }}</span></td>
+                                <td>
+                                    {% if ex.split == 'test' %}
+                                        <span class="pill" style="background: rgba(251,191,36,.18); color: #fbbf24;">held out</span>
+                                    {% else %}
+                                        <span class="muted">train</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <h2>{{ '5' if stats.meta else '3' }}. Try it — zero-shot LLM vs. fine-tuned local model</h2>
+        <textarea id="ft-text" placeholder="Type a review, e.g. &quot;the pages fell apart after one read&quot;"></textarea>
+        <button id="ft-run" type="button" {{ 'disabled' if not stats.trained }}>Compare</button>
+        {% if not stats.trained %}
+            <p class="muted" style="margin-top: 10px;">Train the classifier above first.</p>
+        {% endif %}
+
+        <div id="ft-result" style="margin-top: 18px; display: none;">
+            <div class="row">
+                <div>
+                    <p class="muted" style="margin-bottom: 6px;">🧬 Zero-shot (LLM, no training)</p>
+                    <span id="ft-zero" class="pill"></span>
+                </div>
+                <div>
+                    <p class="muted" style="margin-bottom: 6px;">🎛️ Fine-tuned (local classifier)</p>
+                    <span id="ft-tuned" class="pill"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const runBtn = document.getElementById('ft-run');
+        const textEl = document.getElementById('ft-text');
+        const resultEl = document.getElementById('ft-result');
+        const zeroEl = document.getElementById('ft-zero');
+        const tunedEl = document.getElementById('ft-tuned');
+
+        runBtn && runBtn.addEventListener('click', async () => {
+            const text = textEl.value.trim();
+            if (!text) return;
+            runBtn.disabled = true;
+            try {
+                const res = await fetch('/ai/finetune/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text }),
+                });
+                const data = await res.json();
+                zeroEl.textContent = data.zero_shot || 'unavailable';
+                tunedEl.textContent = data.finetuned
+                    ? `${data.finetuned.label} (${Math.round(data.finetuned.confidence * 100)}%)`
+                    : 'unavailable';
+                resultEl.style.display = 'block';
+            } catch (err) {
+                zeroEl.textContent = 'error';
+                tunedEl.textContent = 'error';
+                resultEl.style.display = 'block';
+            } finally {
+                runBtn.disabled = false;
+            }
+        });
+    </script>
+{% endblock %}

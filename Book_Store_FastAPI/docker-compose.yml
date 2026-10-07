@@ -1,0 +1,73 @@
+# Feature: Docker — one command (`docker compose up`) brings up every piece
+# of the stack (MySQL, Redis, the API, the Celery worker) wired together,
+# instead of you starting XAMPP + a worker terminal + the app by hand.
+#
+# Secrets/keys still come from your .env (env_file below); only the values
+# that MUST change inside the Docker network (DB_HOST, REDIS_HOST — service
+# names instead of 127.0.0.1/localhost) are overridden per-service.
+
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"   # matches the default .env (DB_PASSWORD=)
+      MYSQL_DATABASE: book_store_product
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  app:
+    build: .
+    env_file: .env
+    environment:
+      DB_HOST: db
+      REDIS_HOST: redis
+      # Alembic (run below) is now the source of truth for schema changes —
+      # turn off the create_all shortcut so the two never race each other.
+      CREATE_TABLES: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app/static/book-covers:/app/app/static/book-covers
+      - ./app/static/reports:/app/app/static/reports
+    # Migrate, then serve. Runs every start — a no-op when already up to date.
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  worker:
+    build: .
+    env_file: .env
+    environment:
+      DB_HOST: db
+      REDIS_HOST: redis
+      CREATE_TABLES: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./app/static/reports:/app/app/static/reports
+    # --pool=solo: the default "prefork" pool needs fork(), which isn't
+    # available on Windows — irrelevant here (this runs inside Linux
+    # containers either way) but kept so the same command works if you ever
+    # run the worker natively on Windows too (see README).
+    command: celery -A app.core.celery_app worker --loglevel=info --pool=solo
+
+volumes:
+  mysql_data:

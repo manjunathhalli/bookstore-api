@@ -18,6 +18,20 @@
             <label for="Price">Price</label>
             <input type="number" step="0.01" min="0" name="Price" id="Price" value="{{ book.price }}" required>
 
+            <label for="genre">Genre (optional)</label>
+            <input type="text" name="genre" id="genre" value="{{ book.genre or '' }}" placeholder="e.g. Fantasy">
+
+            <p class="muted" style="margin: -8px 0 14px; font-size: .8rem;">
+                🧠 AI tags (auto-generated, Feature 8):
+                {% if book.tags %}
+                    {% for t in book.tags %}<span class="pill">{{ t }}</span> {% endfor %}
+                {% else %}<span class="muted">none yet — saved on next update</span>{% endif %}
+                &nbsp;·&nbsp; Embedding for semantic search:
+                {% if book.embedding %}<span class="pill">indexed ({{ book.embedding|length }}-dim vector)</span>
+                {% else %}<span class="muted">not indexed</span>{% endif %}
+                — both refresh automatically when you save.
+            </p>
+
             {% if book.image %}
                 <label>Current cover</label>
                 <img src="{{ book.image }}" alt="" style="width: 70px; height: 96px; object-fit: cover; border-radius: 6px; margin-bottom: 14px;">

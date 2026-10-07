@@ -30,7 +30,7 @@
         {% if books %}
             <table>
                 <thead>
-                    <tr><th>#</th><th>Cover</th><th>Name</th><th>Author</th><th>Price</th><th>Qty</th>{% if is_admin %}<th></th>{% endif %}</tr>
+                    <tr><th>#</th><th>Cover</th><th>Name</th><th>Author</th><th>Genre</th><th>🧠 AI tags</th><th>Price</th><th>Qty</th>{% if is_admin %}<th></th>{% endif %}</tr>
                 </thead>
                 <tbody>
                     {% for book in books %}
@@ -43,6 +43,12 @@
                             </td>
                             <td>{{ book.name }}</td>
                             <td>{{ book.author }}</td>
+                            <td>{% if book.genre %}<span class="pill">{{ book.genre }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+                            <td>
+                                {% if book.tags %}
+                                    {% for t in book.tags %}<span class="pill" title="auto-tagged from title+description by AI Feature 8">{{ t }}</span> {% endfor %}
+                                {% else %}<span class="muted">—</span>{% endif %}
+                            </td>
                             <td>₹{{ "%.2f"|format(book.price|float) }}</td>
                             <td>{{ book.quantity }}</td>
                             {% if is_admin %}
@@ -74,6 +80,13 @@
 
                 <label for="description">Description</label>
                 <textarea name="description" id="description" required></textarea>
+                <button type="button" class="ghost" id="gen-desc-btn">
+                    ✨ Generate with AI
+                </button>
+                <p class="muted" style="margin: 4px 0 14px; font-size: .8rem;">
+                    Generative AI (Feature 2): one LLM call, prompt = title + author, no catalogue
+                    lookup — it writes fresh marketing copy, it doesn't look anything up.
+                </p>
 
                 <div class="row">
                     <div>
@@ -85,6 +98,14 @@
                         <input type="number" min="0" name="quantity" id="quantity" required>
                     </div>
                 </div>
+
+                <label for="genre">Genre (optional)</label>
+                <input type="text" name="genre" id="genre" placeholder="e.g. Fantasy">
+                <p class="muted" style="margin: -8px 0 14px; font-size: .8rem;">
+                    This is a manual field. On save, AI Feature 8 also <strong>auto-tags</strong>
+                    the book (1–4 genre labels from the title + description) and
+                    <strong>embeds</strong> it for Semantic Search — shown as 🧠 AI tags in the table above.
+                </p>
 
                 <label for="image">Cover image</label>
                 <input type="file" name="image" id="image" accept="image/*" required>
@@ -110,5 +131,41 @@
             </form>
         </div>
     </div>
+
+    <script>
+        // AI Feature 2 — generate a product description from the name + author.
+        const genBtn = document.getElementById('gen-desc-btn');
+        if (genBtn) {
+            genBtn.addEventListener('click', async () => {
+                const name = document.getElementById('name').value.trim();
+                const author = document.getElementById('author').value.trim();
+                if (!name || !author) {
+                    alert('Enter a name and author first.');
+                    return;
+                }
+                const original = genBtn.textContent;
+                genBtn.disabled = true;
+                genBtn.textContent = '✨ Generating…';
+                try {
+                    const res = await fetch('/ai/books/generate-description', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, author }),
+                    });
+                    const data = await res.json();
+                    if (data.description) {
+                        document.getElementById('description').value = data.description;
+                    } else {
+                        alert(data.error || 'Could not generate a description.');
+                    }
+                } catch (err) {
+                    alert('Something went wrong generating the description.');
+                } finally {
+                    genBtn.disabled = false;
+                    genBtn.textContent = original;
+                }
+            });
+        }
+    </script>
     {% endif %}
 {% endblock %}

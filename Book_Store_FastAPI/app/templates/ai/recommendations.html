@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Recommendations{% endblock %}
+{% block h1 %}🎯 Recommended for you{% endblock %}
+{% block subtitle %}Picks based on what you've ordered and wishlisted.{% endblock %}
+
+{% block content %}
+    {% if not ai_enabled %}
+        <div class="alert alert-error">Recommendations need a Claude API key (<code>ANTHROPIC_API_KEY</code>).</div>
+    {% endif %}
+
+    {% if recommended %}
+        <div class="card" style="background: rgba(99,102,241,.08);">
+            <strong>🎯 How this worked:</strong>
+            <p class="muted" style="margin-top: 6px;">
+                One LLM call was given your <strong>{{ basis.ordered_count }}</strong> ordered title(s),
+                <strong>{{ basis.wishlist_count }}</strong> wishlisted title(s), and the full
+                <strong>{{ basis.catalog_count }}</strong>-book catalogue, and asked to pick up to 4 books
+                you haven't already bought — with a reason for each
+                (<code>app/ai/service.py::recommend</code>). It's generative reasoning over real rows,
+                not a learned recommender model.
+            </p>
+        </div>
+        <div class="grid">
+            {% for rec in recommended %}
+                <div class="card">
+                    <h2>{{ rec.book.name }}</h2>
+                    <p class="muted">by {{ rec.book.author }} — ₹{{ "%.2f"|format(rec.book.price|float) }}</p>
+                    <p>{{ rec.reason }}</p>
+                    {% if rec.book.tags %}
+                        <p>{% for t in rec.book.tags %}<span class="pill">{{ t }}</span> {% endfor %}</p>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    {% elif ai_enabled %}
+        <div class="card">
+            <p class="muted">No recommendations yet — order or wishlist a few books and check back.</p>
+        </div>
+    {% endif %}
+{% endblock %}
