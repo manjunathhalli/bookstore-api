@@ -29,35 +29,46 @@ both.
 - **Reports** — admin-only Excel sales export, built in the background by a
   Celery worker with Pandas/OpenPyXL. *(admin)*
 
-## AI features (Claude API)
+## AI features (switchable LLM: Groq / Anthropic / Ollama)
 
-A native port of the *Book Store AI Integration Guide* — all 10 AI concepts,
-built on the same models/database. The reusable client is
-`app/core/ai.py` (`ClaudeService`); the feature logic is `app/ai/service.py`;
-the HTTP surface is `app/ai/web.py` (session UI, under `/ai`) and
-`app/ai/api.py` (JWT REST, under `/api/ai`).
+A native port of the *Book Store AI Integration Guide* — **11 numbered AI
+features** plus **3 chatbot variants**, built on the same models/database.
+The reusable client is `app/core/ai.py` (`ClaudeService`); the feature logic
+is `app/ai/service.py`; the HTTP surface is `app/ai/web.py` (session UI,
+under `/ai`) and `app/ai/api.py` (JWT REST, under `/api/ai`). Every feature
+page shows not just the output but an inline **"how this worked"**
+explanation grounded in the real data/trace behind it (e.g. which tool the
+chatbot called, how many real reviews a summary was condensed from, the
+actual order/wishlist counts fed into a recommendation).
 
 | # | Feature | Where |
 |---|---------|-------|
-| 1 | **Sentiment analysis** — reviews labelled Positive/Neutral/Negative on submit | hook in feedback store → `feedbacks.sentiment` |
+| 1 | **Sentiment analysis** — reviews labelled Positive/Neutral/Negative on submit, shown on the feedback page | hook in feedback store → `feedbacks.sentiment` |
 | 2 | **Description generator** — admin "✨ Generate with AI" on the add-book form | `POST /ai/books/generate-description` |
 | 3 | **Review summarization** — "✨ AI Review Summary" on the feedback page | `POST /ai/reviews/summary` |
 | 4 | **Natural-language search** — "cheap thrillers under 500" → filters | `GET /ai/search` |
-| 5a | **AI chatbot (LangChain agent)** — BookBot picks tools: catalog, orders, live weather | `GET/POST /ai/chat`, `POST /api/ai/chat` |
+| 5a | **AI chatbot (LangChain agent)** — BookBot picks tools: catalog, orders, live weather, add-to-cart, place-order | `GET/POST /ai/chat`, `POST /api/ai/chat` |
 | 5b | **AI chatbot (classic RAG)** — BookBot answers grounded only in the real catalogue + orders | `GET/POST /ai/rag-chat`, `POST /api/ai/chat-rag` |
+| 5c | **AI chatbot (LangGraph)** — same tools as 5a, as an explicit graph; orders over ₹2,000 pause for a yes/no confirmation | `GET/POST /ai/graph-chat`, `POST /api/ai/chat-graph` |
 | 6 | **Recommendations** — from your orders + wishlist, each with a reason | `GET /ai/recommendations` |
 | 7 | **Content moderation** — abusive/spam reviews rejected before save (fail-open) | hook in feedback store |
-| 8 | **Auto-tagging** — genre tags assigned when a book is created/updated | hook in book store → `books.tags` |
+| 8 | **Auto-tagging** — genre tags assigned when a book is created/updated, shown as 🧠 AI tags in the catalogue | hook in book store → `books.tags` |
 | 9 | **Demand forecasting** — admin report over real order counts | `GET /ai/forecast` |
-| 10 | **Semantic search** — search by meaning via local embeddings + cosine | `GET /ai/semantic`, `books.embedding` |
+| 10 | **Semantic search** — search by meaning via local embeddings + cosine similarity | `GET /ai/semantic`, `books.embedding` |
+| 11 | **Fine-tuning** (admin) — a local classifier trained on this store's own reviews, compared side-by-side with the zero-shot LLM | `GET /ai/finetune`, `POST /ai/finetune/{train,predict}` |
 
-Text features (1–9) call an LLM server-side; the key never reaches the browser,
-and each feature degrades gracefully when no key is set. **The LLM backend is
-switchable** with `AI_PROVIDER` — it drives *every* text feature and both
-chatbots:
+There is also a **second, separate chatbot** over Microsoft Business Central
+data — see [Business Central chatbot](#business-central-chatbot-second-ai-feature-set) below.
+
+Text features (1–9, 11) call an LLM server-side; the key never reaches the
+browser, and each feature degrades gracefully when no key/model is
+reachable. **The LLM backend is switchable** with `AI_PROVIDER` — it drives
+*every* text feature and all three chatbots:
 
 - **`groq`** *(default)* — **free**, OpenAI-compatible. Get a key at
   <https://console.groq.com/keys>.
+- **`ollama`** — **free, local, key-less**. Install [Ollama](https://ollama.com),
+  `ollama pull qwen2.5`, and leave the key blank — nothing leaves your machine.
 - **`anthropic`** — Anthropic Claude (paid credits).
 
 ```
@@ -67,6 +78,11 @@ GROQ_API_KEY=gsk_...
 GROQ_MODEL=llama-3.3-70b-versatile
 GROQ_MODEL_FAST=llama-3.1-8b-instant
 
+# Or run fully local with Ollama (no key, no network)
+# AI_PROVIDER=ollama
+# OLLAMA_BASE_URL=http://localhost:11434
+# OLLAMA_MODEL=qwen2.5
+
 # Or switch to Anthropic Claude
 # AI_PROVIDER=anthropic
 # ANTHROPIC_API_KEY=sk-ant-...
@@ -74,48 +90,66 @@ GROQ_MODEL_FAST=llama-3.1-8b-instant
 # ANTHROPIC_MODEL_FAST=claude-haiku-4-5-20251001
 ```
 
-The shared `ClaudeService` (`app/core/ai.py`) sends to Anthropic's Messages API
-or Groq's Chat Completions API depending on `AI_PROVIDER`; callers are unchanged.
+The shared `ClaudeService` (`app/core/ai.py`) dispatches to Anthropic's
+Messages API, Groq's Chat Completions API, or a local Ollama's `/api/chat`,
+depending on `AI_PROVIDER`; callers are unchanged. The two LangChain-based
+chatbots (5a/5c) use the same setting via `app/ai/agent.py`'s own
+provider-switch, independent of whichever provider the rest of the app uses
+(Anthropic directly) via `ClaudeService.enabled`.
 
 ### Semantic search embeddings (local — no API key)
 
-Anthropic does **not** offer an embeddings API, so Semantic Search (Feature 10)
-runs a **local** [`sentence-transformers`](https://www.sbert.net/) model
-(`all-MiniLM-L6-v2`) instead of the Voyage AI service used originally. Nothing
-external is called and no key is needed — install the dependency and it works:
+Anthropic does **not** offer an embeddings API, so Semantic Search (Feature 10,
+and Fine-Tuning's Feature 11) runs a **local** embedding model
+(`all-MiniLM-L6-v2`, 384-dim) instead of the Voyage AI service used originally.
+Nothing external is called and no key is needed — install a dependency and it
+works. Two interchangeable backends produce the identical model/vectors:
+
+- **[`fastembed`](https://github.com/qdrant/fastembed)** *(preferred)* — ONNX
+  runtime with Microsoft-signed DLLs. Use this if Windows **Smart App
+  Control** is on, which blocks PyTorch's unsigned DLLs.
+- **[`sentence-transformers`](https://www.sbert.net/)** — PyTorch backend,
+  used as a fallback when `fastembed` isn't installed/loadable.
 
 ```
-pip install -r requirements.txt   # includes sentence-transformers
+pip install -r requirements.txt   # includes both fastembed and sentence-transformers
 ```
 
 On first use the model (~80 MB) is downloaded once from Hugging Face and cached
-locally; every call after that is fully offline. If `sentence-transformers` is
-not installed, Semantic Search simply stays hidden (the other 9 features are
-unaffected). The retired Voyage AI code is preserved, commented out, in
-`app/core/ai.py` for reference.
+locally; every call after that is fully offline. If neither backend can be
+loaded, Semantic Search (and Fine-Tuning) simply stay hidden — the other
+features are unaffected. The retired Voyage AI code is preserved, commented
+out, in `app/core/ai.py` for reference.
 
 The three AI columns (`feedbacks.sentiment`, `books.tags`, `books.embedding`)
 are added automatically on startup for pre-existing databases. Run **Reindex
 embeddings** on the Semantic Search page (or `POST /api/ai/reindex-embeddings`)
 to vectorise books created before the embedding model was available.
 
-### AI chatbot — two separate variants (Feature 5)
+### AI chatbot — three separate variants (Feature 5)
 
-There are **two independent chatbots**, both reachable from the AI hub. Pick
+There are **three independent chatbots**, all reachable from the AI hub. Pick
 whichever you want to demo; they share the retrieval helpers but nothing else:
 
 | Variant | Page / endpoint | Backend | Needs |
 |---------|-----------------|---------|-------|
 | **5a — LangChain agent** | `/ai/chat`, `POST /api/ai/chat` | tool-calling agent | active `AI_PROVIDER` key |
 | **5b — Classic RAG** | `/ai/rag-chat`, `POST /api/ai/chat-rag` | LLM over retrieved context | active `AI_PROVIDER` key |
+| **5c — LangGraph agent** | `/ai/graph-chat`, `POST /api/ai/chat-graph` | same tools as 5a, as an explicit graph | active `AI_PROVIDER` key |
 
-Both bots use whatever `AI_PROVIDER` is set to (Groq by default — so both run
-free). The **classic RAG** bot (5b) is the original implementation: it retrieves
-up to 15 relevant books plus your recent orders, pastes them into the prompt,
-and asks the LLM to answer *only* from that context — no tools, no live weather.
-It lives in `service.rag_chat_reply`.
+All three bots use whatever `AI_PROVIDER` is set to (Groq by default — so all
+run free). The **classic RAG** bot (5b) is the original implementation: it
+retrieves up to 15 relevant books plus your recent orders, pastes them into
+the prompt, and asks the LLM to answer *only* from that context — no tools,
+no live weather. It lives in `service.rag_chat_reply`.
 
-The **LangChain agent** (5a) is the newer one described below.
+The **LangChain agent** (5a) is described below. The **LangGraph agent** (5c,
+`app/ai/graph_agent.py`) reuses 5a's exact tools but wires them as an explicit
+graph instead of a fixed loop, so it can *branch*: a `place_order` over
+₹2,000 routes to a `confirm` node that asks for an explicit yes/no instead of
+buying immediately, and it keeps a short per-user conversation history across
+turns (something a one-shot agent call can't do). Every bot reply also shows
+a "🔧 how it answered" trace — which tool ran, or which graph branch was taken.
 
 #### LangChain agent (Feature 5a)
 
@@ -176,6 +210,40 @@ maps common renamed Indian cities (Bangalore→Bengaluru, Bombay→Mumbai, …).
 A full walkthrough with the actual code is in
 **`Book_Store_FastAPI_Chatbot_LangChain.docx`** (regenerate with
 `python build_chatbot_doc.py`).
+
+### Business Central chatbot (second AI feature set)
+
+A **separate, second chatbot** — entirely independent of BookBot above — that
+answers questions over **Microsoft Dynamics 365 Business Central** data
+(items, customers, sales orders) instead of the book catalogue. It lives in
+`app/bc/` (own `client.py`, `vectorstore.py`, `service.py`, `schemas.py`,
+`api.py`, `web.py`) and is reachable at `/bc/chat` (web) and `/api/bc/*` (JWT).
+
+How it works: BC records are fetched (real Azure AD client-credentials OData/
+REST call in `app/bc/client.py`, or — with no BC credentials set — a bundled
+`app/bc/sample_data.py` fallback so the whole pipeline works key-lessly),
+embedded with the same local model as Semantic Search, and stored in
+**[Qdrant](https://qdrant.tech)**, a real vector database. Queries retrieve
+the closest-matching records from Qdrant and the active `AI_PROVIDER` LLM
+answers grounded in them — RAG, same pattern as chatbot 5b, but over a
+different data source and a real vector DB instead of a plain SQL column.
+
+```
+# Zero-setup: leave BC_* blank to test against bundled sample data
+QDRANT_PATH=./qdrant_storage   # embedded mode — no Qdrant server needed
+
+# Real Business Central data (Azure AD app registration required):
+# BC_TENANT_ID=...
+# BC_CLIENT_ID=...
+# BC_CLIENT_SECRET=...
+# BC_ENVIRONMENT=Production
+# BC_COMPANY=...
+# BC_ENTITIES=items,customers,salesOrders
+```
+
+Ingestion is a manual **"Sync now"** action (admin); retrieval runs
+automatically on every chat query. See `.env.example` for every `BC_*`/
+`QDRANT_*` variable.
 
 ## Infrastructure features (Alembic, Redis, Celery, Reports, Docker, Pytest)
 
